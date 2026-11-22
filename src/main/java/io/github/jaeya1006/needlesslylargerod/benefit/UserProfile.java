@@ -6,16 +6,14 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 혜택 추천에 쓰는 사용자 조건. 로그인이 없어서 한 줄(id=1)만 쓴다. */
+/** 혜택 추천에 쓰는 사용자 조건. id = 회원 id (회원마다 한 줄). */
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserProfile {
 
-    public static final long ID = 1L;
-
     @Id
-    private Long id = ID;
+    private Long id;
 
     private Integer birthYear;
 
@@ -23,7 +21,8 @@ public class UserProfile {
 
     private String status; // 학생, 직장인, 구직자 ...
 
-    public UserProfile(Integer birthYear, String region, String status) {
+    public UserProfile(Long memberId, Integer birthYear, String region, String status) {
+        this.id = memberId;
         this.birthYear = birthYear;
         this.region = region;
         this.status = status;
