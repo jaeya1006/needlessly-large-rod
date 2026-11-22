@@ -5,7 +5,10 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import io.github.jaeya1006.needlesslylargerod.auth.CurrentMember;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -32,17 +35,18 @@ public class ProfileController {
     }
 
     @GetMapping
-    public UserProfile get() {
-        return repository.findById(UserProfile.ID)
+    public UserProfile get(@AuthenticationPrincipal Jwt jwt) {
+        return repository.findById(CurrentMember.id(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "아직 조건을 입력하지 않았어요"));
     }
 
     @PutMapping
-    public UserProfile save(@Valid @RequestBody ProfileRequest req) {
+    public UserProfile save(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ProfileRequest req) {
         if (req.birthYear() > Year.now().getValue()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "출생연도가 올해보다 늦을 수 없어요");
         }
-        UserProfile p = repository.findById(UserProfile.ID).orElseGet(() -> new UserProfile(null, null, null));
+        long me = CurrentMember.id(jwt);
+        UserProfile p = repository.findById(me).orElseGet(() -> new UserProfile(me, null, null, null));
         p.update(req.birthYear(), req.region(), req.status());
         return repository.save(p);
     }

@@ -13,6 +13,23 @@ const SUBCATEGORIES = {
 };
 
 const $ = id => document.getElementById(id);
+
+// ---------- 로그인 ----------
+// 토큰은 HttpOnly 쿠키라 자바스크립트에서 볼 수 없다. 401이 오면 리프레시로 한 번 갱신해 보고, 안 되면 로그인 화면.
+let refreshing = null; // 여러 요청이 동시에 401을 받아도 갱신은 한 번만
+function refreshOnce() {
+  refreshing ??= fetch('/api/auth/refresh', { method: 'POST' })
+    .then(r => r.ok).catch(() => false).finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+async function api(url, opts) {
+  let res = await fetch(url, opts);
+  if (res.status !== 401) return res;
+  if (await refreshOnce()) res = await fetch(url, opts);
+  if (res.status === 401) showLogin('로그인이 만료됐어요. 다시 로그인해 주세요.');
+  return res;
+}
 const pad = n => String(n).padStart(2, '0');
 const won = n => n.toLocaleString('ko-KR') + '원';
 const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
@@ -39,7 +56,7 @@ function notice(msg) {
 }
 
 async function fetchMonth(y, m) {
-  const res = await fetch(`/api/expenses?month=${y}-${pad(m)}`);
+  const res = await api(`/api/expenses?month=${y}-${pad(m)}`);
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return (await res.json()).filter(e => e.type !== 'INCOME'); // 예전에 적은 수입은 숨김
 }
@@ -179,13 +196,13 @@ function renderWatched(cur, old) {
 }
 
 async function loadWatched() {
-  const res = await fetch('/api/watched-categories').catch(() => null);
+  const res = await api('/api/watched-categories').catch(() => null);
   if (res?.ok) { state.watched = await res.json(); renderStats(); }
 }
 
 async function saveWatched() {
   const picked = [...document.querySelectorAll('#watch-checks input:checked')].map(b => b.value);
-  const res = await fetch('/api/watched-categories', {
+  const res = await api('/api/watched-categories', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(picked),
   }).catch(() => null);
   if (res?.ok) { state.watched = await res.json(); notice(''); }
@@ -361,7 +378,7 @@ $('back').onclick = () => {
 
 async function save(category, subcategory = null) {
   const spentAt = $('entry-date').value;
-  const res = await fetch(editing ? `/api/expenses/${editing.id}` : '/api/expenses', {
+  const res = await api(editing ? `/api/expenses/${editing.id}` : '/api/expenses', {
     method: editing ? 'PUT' : 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -381,7 +398,7 @@ async function save(category, subcategory = null) {
 $('delete-entry').onclick = async () => {
   const label = editing.title || editing.subcategory || editing.category;
   if (!confirm(`'${label}' ${won(editing.amount)}을 삭제할까요?`)) return;
-  const res = await fetch('/api/expenses/' + editing.id, { method: 'DELETE' }).catch(() => null);
+  const res = await api('/api/expenses/' + editing.id, { method: 'DELETE' }).catch(() => null);
   closeSheet();
   if (!res?.ok) { notice('삭제하지 못했어요. 잠시 뒤 다시 시도해 주세요.'); return; }
   load();
@@ -392,7 +409,7 @@ const profileForm = $('profile-form');
 profileForm.birthYear.max = now.getFullYear(); // 서버도 올해보다 늦은 연도는 거부한다
 
 async function loadProfile() {
-  const res = await fetch('/api/profile').catch(() => null);
+  const res = await api('/api/profile').catch(() => null);
   if (!res?.ok) return; // 아직 입력 안 함(404) 또는 서버 꺼짐
   const p = await res.json();
   profileForm.birthYear.value = p.birthYear ?? '';
@@ -403,7 +420,7 @@ async function loadProfile() {
 profileForm.onsubmit = async ev => {
   ev.preventDefault();
   const body = { birthYear: Number(profileForm.birthYear.value), region: profileForm.region.value, status: profileForm.status.value };
-  const res = await fetch('/api/profile', {
+  const res = await api('/api/profile', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }).catch(() => null);
   $('benefit-msg').textContent = res?.ok ? '조건을 저장했어요.' : '조건을 저장하지 못했어요. 입력을 확인해 주세요.';
@@ -420,7 +437,7 @@ $('recommend-btn').onclick = async () => {
   btn.disabled = true;
   $('benefit-msg').textContent = '정부 혜택을 찾고 있어요. 1분쯤 걸릴 수 있어요…';
   $('benefit-list').replaceChildren();
-  const res = await fetch('/api/recommendations').catch(() => null);
+  const res = await api('/api/recommendations').catch(() => null);
   btn.disabled = false;
   if (res?.status === 429) { $('benefit-msg').textContent = '이미 추천을 찾는 중이에요. 잠시 뒤 다시 시도해 주세요.'; return; }
   if (!res?.ok) { $('benefit-msg').textContent = '혜택 정보를 가져오지 못했어요. 잠시 뒤 다시 시도해 주세요.'; return; }
@@ -443,7 +460,61 @@ $('recommend-btn').onclick = async () => {
   }));
 };
 
-load();
-loadWatched();
-loadProfile();
+// ---------- 로그인 화면 ----------
+let signupMode = false;
+const authForm = $('auth-form');
+
+function setAuthMode(signup) {
+  signupMode = signup;
+  $('auth-title').textContent = signup ? '회원가입' : '로그인';
+  $('auth-submit').textContent = signup ? '가입하기' : '로그인';
+  $('auth-toggle').textContent = signup ? '이미 계정이 있으면 로그인' : '처음이면 회원가입';
+  authForm.password.autocomplete = signup ? 'new-password' : 'current-password';
+  $('auth-error').textContent = '';
+}
+
+function showLogin(message = '') {
+  $('auth').hidden = false;
+  $('auth-error').textContent = message;
+  authForm.email.focus();
+}
+
+$('auth-toggle').onclick = () => setAuthMode(!signupMode);
+
+authForm.onsubmit = async ev => {
+  ev.preventDefault();
+  const res = await fetch(signupMode ? '/api/auth/signup' : '/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: authForm.email.value, password: authForm.password.value }),
+  }).catch(() => null);
+  if (!res) { $('auth-error').textContent = '서버에 연결하지 못했어요.'; return; }
+  if (res.status === 409) { $('auth-error').textContent = '이미 가입한 이메일이에요. 로그인해 주세요.'; return; }
+  if (res.status === 400) { $('auth-error').textContent = '이메일 형식과 비밀번호(8~64자)를 확인해 주세요.'; return; }
+  if (!res.ok) { $('auth-error').textContent = '이메일 또는 비밀번호가 맞지 않아요.'; return; }
+  authForm.password.value = '';
+  start();
+};
+
+$('logout').onclick = async () => {
+  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
+  state.items = []; state.prevItems = []; state.watched = [];
+  render();
+  setAuthMode(false);
+  showLogin();
+};
+
+async function start() {
+  // 처음 열 때는 '만료' 안내 없이: 액세스 토큰이 없거나 만료면 리프레시를 조용히 한 번 시도
+  let res = await fetch('/api/auth/me').catch(() => null);
+  if (res?.status === 401 && await refreshOnce()) res = await fetch('/api/auth/me').catch(() => null);
+  if (!res?.ok) { showLogin(); return; }
+  const me = await res.json();
+  $('auth').hidden = true;
+  $('logout').title = `${me.email} 로그아웃`;
+  load();
+  loadWatched();
+  loadProfile();
+}
+
+start();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');

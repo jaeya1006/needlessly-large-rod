@@ -6,6 +6,7 @@
   :root { --bg: #0d1117; --card: #161b22; --fg: #e6edf3; --muted: #8b949e; --line: #30363d; --sun: #ff6b6b; --sat: #4dabf7; --down: #51cf66; }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; } /* display를 지정한 요소(.auth 등)도 hidden이면 숨긴다 */
 html, body { margin: 0; }
 body { font-family: system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif; background: var(--bg); color: var(--fg); padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
@@ -124,3 +125,14 @@ input { font: inherit; color: inherit; }
 .benefit li { grid-template-columns: 36px 1fr; align-items: start; }
 .benefit a { color: var(--accent); font-weight: 600; }
 .next-btn:disabled { opacity: .5; }
+/* 로그인 */
+/* 헤더: [빈칸] ‹ 제목 › [로그아웃] 5칸 격자라 좁은 화면에서도 겹치지 않는다 */
+.top { display: grid; grid-template-columns: 1fr 44px auto 44px 1fr; gap: 8px; }
+.top #prev { grid-column: 2; } .top h1 { grid-column: 3; min-width: 7em; } .top #next { grid-column: 4; }
+.logout { grid-column: 5; justify-self: end; color: #fff; font-size: .75rem; opacity: .9; padding: 8px 0; white-space: nowrap; }
+.auth { position: fixed; inset: 0; z-index: 20; background: var(--bg); display: grid; place-items: center; padding: 16px; }
+.auth-box { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 12px; }
+.auth-box h1 { margin: 0; color: var(--accent); font-size: 1.5rem; text-align: center; }
+.auth-title { margin: 0 0 8px; text-align: center; color: var(--muted); }
+.auth-box input { font: inherit; color: var(--fg); background: var(--card); padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
+.link-btn { color: var(--accent); padding: 8px; }

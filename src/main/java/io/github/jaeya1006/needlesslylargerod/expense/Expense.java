@@ -6,6 +6,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -23,6 +24,9 @@ public class Expense {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @JsonIgnore // 화면에 보낼 필요 없음
+    private Long ownerId; // 회원 id. 로그인 기능 전 데이터는 null → 첫 회원에게 넘긴다
+
     @Enumerated(EnumType.STRING)
     private Type type;
 
@@ -38,7 +42,8 @@ public class Expense {
 
     private LocalDate spentAt;
 
-    public Expense(Type type, String title, long amount, String category, String subcategory, String memo, LocalDate spentAt) {
+    public Expense(Long ownerId, Type type, String title, long amount, String category, String subcategory, String memo, LocalDate spentAt) {
+        this.ownerId = ownerId;
         this.type = type;
         this.title = title;
         this.amount = amount;

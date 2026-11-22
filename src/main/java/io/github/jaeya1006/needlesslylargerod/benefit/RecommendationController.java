@@ -2,7 +2,10 @@ package io.github.jaeya1006.needlesslylargerod.benefit;
 
 import io.github.jaeya1006.needlesslylargerod.expense.WatchedCategory;
 import io.github.jaeya1006.needlesslylargerod.expense.WatchedCategoryRepository;
+import io.github.jaeya1006.needlesslylargerod.auth.CurrentMember;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,15 +43,16 @@ public class RecommendationController {
     private final WatchedCategoryRepository watched;
 
     @GetMapping
-    public Response recommend() {
+    public Response recommend(@AuthenticationPrincipal Jwt jwt) {
         List<String> missing = new ArrayList<>();
         if (!gov.hasKey()) missing.add("DATA_GO_KR_API_KEY");
         if (!recommender.hasKey()) missing.add("ANTHROPIC_API_KEY");
         if (!missing.isEmpty()) return new Response("NO_KEYS", missing, List.of(), List.of());
 
-        UserProfile p = profiles.findById(UserProfile.ID).orElse(null);
+        long me = CurrentMember.id(jwt);
+        UserProfile p = profiles.findById(me).orElse(null);
         if (p == null || p.getBirthYear() == null) return Response.of("NO_PROFILE");
-        List<String> categories = watched.findAll().stream().map(WatchedCategory::getCategory).sorted().toList();
+        List<String> categories = watched.findByOwnerIdOrderByCategory(me).stream().map(WatchedCategory::getCategory).toList();
         if (categories.isEmpty()) return Response.of("NO_WATCHED");
 
         List<String> unsupported = categories.stream().filter(c -> !BenefitCandidates.supports(c)).toList();
