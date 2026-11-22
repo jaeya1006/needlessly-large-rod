@@ -7,6 +7,10 @@ const CATEGORIES = [
   ['교육', '📚', '#dbe4ff'], ['선물', '🎁', '#f3d9fa'], ['경조사', '💐', '#ffdeeb'], ['기타', '📦', '#dee2e6'],
 ];
 const catInfo = name => CATEGORIES.find(c => c[0] === name) || [name, '•', '#dee2e6'];
+// 세부 분류: { 큰 분류: [[이름, 아이콘], ...] }. 여기 목록만 추가하면 다른 분류도 한 단계 더 고르게 된다.
+const SUBCATEGORIES = {
+  '교통': [['버스', '🚌'], ['지하철', '🚇'], ['택시', '🚕'], ['기차', '🚆'], ['비행기', '✈️'], ['주유', '⛽'], ['주차·통행료', '🅿️'], ['기타', '📦']],
+};
 
 const $ = id => document.getElementById(id);
 const pad = n => String(n).padStart(2, '0');
@@ -17,8 +21,9 @@ const todayIso = iso(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
 const state = { year: now.getFullYear(), month: now.getMonth() + 1, selected: todayIso, items: [] };
 
-function iconEl(category) {
-  const [, emoji, color] = catInfo(category);
+function iconEl(category, subcategory) {
+  const [, catEmoji, color] = catInfo(category);
+  const emoji = SUBCATEGORIES[category]?.find(s => s[0] === subcategory)?.[1] || catEmoji;
   const span = document.createElement('span');
   span.className = 'icon';
   span.style.background = color;
@@ -94,19 +99,22 @@ function renderDay() {
     const b = document.createElement('button');
     const name = document.createElement('span');
     name.className = 'name';
-    name.textContent = e.title || e.category;
-    if (e.memo || e.title) {
+    // 이름: 내역 > 세부 분류 > 분류 순. 아랫줄: 이름에 안 쓴 분류 경로 + 메모
+    const label = e.title || e.subcategory || e.category;
+    const path = e.title ? [e.category, e.subcategory].filter(Boolean).join(' › ') : e.subcategory ? e.category : null;
+    name.textContent = label;
+    if (path || e.memo) {
       const sub = document.createElement('small');
-      sub.textContent = [e.title ? e.category : null, e.memo].filter(Boolean).join(' · ');
+      sub.textContent = [path, e.memo].filter(Boolean).join(' · ');
       name.append(sub);
     }
     const amt = document.createElement('span');
     amt.className = 'amt expense';
     amt.textContent = won(e.amount);
-    b.append(iconEl(e.category), name, amt);
-    b.setAttribute('aria-label', `${e.title || e.category} ${won(e.amount)}, 눌러서 삭제`);
+    b.append(iconEl(e.category, e.subcategory), name, amt);
+    b.setAttribute('aria-label', `${label} ${won(e.amount)}, 눌러서 삭제`);
     b.onclick = async () => {
-      if (!confirm(`'${e.title || e.category}' ${won(e.amount)}을 삭제할까요?`)) return;
+      if (!confirm(`'${label}' ${won(e.amount)}을 삭제할까요?`)) return;
       const res = await fetch('/api/expenses/' + e.id, { method: 'DELETE' }).catch(() => null);
       if (!res?.ok) { notice('삭제하지 못했어요. 잠시 뒤 다시 시도해 주세요.'); return; }
       load();
@@ -210,28 +218,53 @@ amountInput.oninput = () => {
 };
 amountInput.onkeydown = e => { if (e.key === 'Enter' && amountValue()) goStep2(); };
 
-function goStep2() {
-  $('step2-amount').textContent = won(amountValue());
+let pickedCategory = null; // 세부 분류를 고르는 중이면 그 큰 분류
+
+function showCategories() {
+  pickedCategory = null;
+  $('cat-hint').textContent = '분류를 누르면 저장돼요';
   $('cat-grid').replaceChildren(...CATEGORIES.map(([name]) => {
     const b = document.createElement('button');
     b.append(iconEl(name), name);
-    b.onclick = () => save(name);
+    b.onclick = () => SUBCATEGORIES[name] ? showSubcategories(name) : save(name);
     return b;
   }));
+}
+
+function showSubcategories(category) {
+  pickedCategory = category;
+  $('cat-hint').textContent = `${category} › 세부 분류를 누르면 저장돼요`;
+  $('cat-grid').replaceChildren(...SUBCATEGORIES[category].map(([name]) => {
+    const b = document.createElement('button');
+    b.append(iconEl(category, name), name);
+    b.onclick = () => save(category, name);
+    return b;
+  }));
+  $('cat-grid').querySelector('button').focus();
+}
+
+function goStep2() {
+  $('step2-amount').textContent = won(amountValue());
+  showCategories();
   showStep(2);
   $('entry-title').focus();
 }
 $('next-step').onclick = goStep2;
-$('back').onclick = () => { showStep(1); amountInput.focus(); };
+// 뒤로: 세부 분류 → 분류 목록 → 금액
+$('back').onclick = () => {
+  if (pickedCategory) { showCategories(); return; }
+  showStep(1);
+  amountInput.focus();
+};
 
-async function save(category) {
+async function save(category, subcategory = null) {
   const spentAt = $('entry-date').value;
   const res = await fetch('/api/expenses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       type: 'EXPENSE', title: $('entry-title').value, amount: amountValue(),
-      category, memo: $('entry-memo').value, spentAt,
+      category, subcategory, memo: $('entry-memo').value, spentAt,
     }),
   }).catch(() => null);
   if (!res) { $('error').textContent = '서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.'; return; }
