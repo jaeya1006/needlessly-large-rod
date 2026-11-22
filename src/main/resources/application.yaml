@@ -1,3 +1,6 @@
+server:
+  port: 8081 # 이 Mac에서 nginx가 8080을 씀
+
 spring:
   application:
     name: needlessly-large-rod
