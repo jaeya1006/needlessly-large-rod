@@ -82,12 +82,15 @@ input { font: inherit; color: inherit; }
 .amount-row input { flex: 1; min-width: 0; border: 0; background: none; text-align: right; font-size: 3.4rem; color: var(--accent); outline: none; font-variant-numeric: tabular-nums; }
 .next-btn { width: 100%; padding: 20px; border-radius: 12px; background: var(--expense); color: #fff; font-size: 1.2rem; font-weight: 600; }
 .next-btn:disabled { opacity: .35; cursor: default; }
+.delete-btn { width: 100%; margin-top: 12px; padding: 16px; border-radius: 12px; border: 1px solid var(--line); color: var(--sun); font-weight: 600; }
 .line-input { width: 100%; padding: 14px 4px; margin-top: 8px; border: 0; border-bottom: 1px solid var(--line); background: none; font-size: 1.1rem; outline: none; }
 .line-input:focus { border-bottom-color: var(--accent); }
 .hint { color: var(--muted); font-size: .85rem; margin: 20px 0 8px; }
 .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 16px 8px; }
 .cat-grid button { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: .8rem; }
 .cat-grid .icon { width: 56px; height: 56px; font-size: 1.6rem; }
+.cat-grid [aria-pressed="true"] .icon { box-shadow: 0 0 0 3px var(--accent); }
+.cat-grid [aria-pressed="true"] { font-weight: 700; }
 .error { color: var(--sun); min-height: 1.2em; }
 #view-calendar { padding-bottom: 80px; } /* + 버튼이 마지막 내역을 가리지 않게 */
 .notice { margin: 0; padding: 10px 16px; background: #fff4e6; color: #a33b00; font-size: .9rem; text-align: center; }

@@ -51,6 +51,27 @@ class ExpenseControllerTest {
     }
 
     @Test
+    void updatesEntry() throws Exception {
+        String id = create("{\"type\":\"EXPENSE\",\"amount\":20,\"category\":\"교통\",\"subcategory\":\"지하철\",\"spentAt\":\"2024-04-01\"}");
+
+        mvc.perform(put("/api/expenses/" + id).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"EXPENSE\",\"title\":\"출근\",\"amount\":1550,\"category\":\"교통\",\"subcategory\":\"버스\",\"memo\":\"\",\"spentAt\":\"2024-04-02\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.amount").value(1550))
+                .andExpect(jsonPath("$.title").value("출근"))
+                .andExpect(jsonPath("$.subcategory").value("버스"))
+                .andExpect(jsonPath("$.memo").value((Object) null))
+                .andExpect(jsonPath("$.spentAt").value("2024-04-02"));
+
+        mvc.perform(put("/api/expenses/999999").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"EXPENSE\",\"amount\":1,\"category\":\"기타\",\"spentAt\":\"2024-04-02\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(put("/api/expenses/" + id).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"EXPENSE\",\"amount\":0,\"category\":\"기타\",\"spentAt\":\"2024-04-02\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void filtersByMonth() throws Exception {
         String oct = create("{\"type\":\"INCOME\",\"amount\":3000000,\"category\":\"월급\",\"spentAt\":\"2025-10-31\"}");
         String nov = create("{\"type\":\"EXPENSE\",\"amount\":1000,\"category\":\"간식\",\"spentAt\":\"2025-11-01\"}");

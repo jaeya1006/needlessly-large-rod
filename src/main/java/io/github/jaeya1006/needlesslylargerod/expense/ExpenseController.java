@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -42,6 +43,15 @@ public class ExpenseController {
     public Expense create(@Valid @RequestBody ExpenseRequest req) {
         return repository.save(new Expense(req.type(), blankToNull(req.title()), req.amount(),
                 req.category(), blankToNull(req.subcategory()), blankToNull(req.memo()), req.spentAt()));
+    }
+
+    @PutMapping("/{id}")
+    public Expense update(@PathVariable Long id, @Valid @RequestBody ExpenseRequest req) {
+        Expense e = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        e.update(req.type(), blankToNull(req.title()), req.amount(),
+                req.category(), blankToNull(req.subcategory()), blankToNull(req.memo()), req.spentAt());
+        return repository.save(e);
     }
 
     @DeleteMapping("/{id}")
