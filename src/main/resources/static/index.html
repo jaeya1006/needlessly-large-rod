@@ -55,6 +55,19 @@
       <div class="checks" id="watch-checks"></div>
     </details>
   </section>
+  <section class="card">
+    <h2 class="card-title">정부 혜택 추천</h2>
+    <p class="hint">'항상 비교하는 분류'로 체크한 분류에 맞는 정부 혜택을 AI가 찾아 줘요.</p>
+    <form class="profile" id="profile-form">
+      <label>출생연도<input name="birthYear" type="number" inputmode="numeric" min="1900" max="2100" placeholder="예: 2001" required></label>
+      <label>사는 곳<select name="region" required><option value="">고르기</option><option>서울</option><option>부산</option><option>대구</option><option>인천</option><option>광주</option><option>대전</option><option>울산</option><option>세종</option><option>경기</option><option>강원</option><option>충북</option><option>충남</option><option>전북</option><option>전남</option><option>경북</option><option>경남</option><option>제주</option></select></label>
+      <label>상태<select name="status" required><option value="">고르기</option><option>학생</option><option>직장인</option><option>구직자</option><option>자영업자</option><option>주부</option><option>기타</option></select></label>
+      <button type="submit" class="small-btn">조건 저장</button>
+    </form>
+    <button class="next-btn" id="recommend-btn">혜택 추천 받기</button>
+    <p class="hint" id="benefit-msg" aria-live="polite"></p>
+    <ul class="mini benefit" id="benefit-list"></ul>
+  </section>
   <ul class="card legend" id="legend"></ul>
 </main>
 
