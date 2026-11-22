@@ -32,10 +32,24 @@ function iconEl(type, category) {
   return span;
 }
 
+// 서버 오류 안내. 빈 문자열이면 숨김.
+function notice(msg) {
+  $('notice').textContent = msg;
+  $('notice').hidden = !msg;
+}
+
 async function load() {
   $('month-label').textContent = `${state.year}년 ${state.month}월`;
-  const res = await fetch(`/api/expenses?month=${state.year}-${pad(state.month)}`);
-  state.items = res.ok ? await res.json() : [];
+  try {
+    const res = await fetch(`/api/expenses?month=${state.year}-${pad(state.month)}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    state.items = await res.json();
+    notice('');
+  } catch {
+    // 서버가 꺼져 있어도 달력은 그린다
+    state.items = [];
+    notice('서버에 연결하지 못했어요. 앱(서버)이 켜져 있는지 확인해 주세요.');
+  }
   render();
 }
 
@@ -104,7 +118,8 @@ function renderDay() {
     b.setAttribute('aria-label', `${e.title || e.category} ${won(e.amount)}, 눌러서 삭제`);
     b.onclick = async () => {
       if (!confirm(`'${e.title || e.category}' ${won(e.amount)}을 삭제할까요?`)) return;
-      await fetch('/api/expenses/' + e.id, { method: 'DELETE' });
+      const res = await fetch('/api/expenses/' + e.id, { method: 'DELETE' }).catch(() => null);
+      if (!res?.ok) { notice('삭제하지 못했어요. 잠시 뒤 다시 시도해 주세요.'); return; }
       load();
     };
     li.append(b);
@@ -239,7 +254,8 @@ async function save(category) {
       type: state.entryType, title: $('entry-title').value, amount: amountValue(),
       category, memo: $('entry-memo').value, spentAt,
     }),
-  });
+  }).catch(() => null);
+  if (!res) { $('error').textContent = '서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.'; return; }
   if (!res.ok) { $('error').textContent = '저장하지 못했어요. 입력을 확인해 주세요.'; return; }
   closeSheet();
   // 다른 달 날짜로 적었으면 그 달로 이동
