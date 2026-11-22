@@ -19,7 +19,7 @@ const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
 const now = new Date();
 const todayIso = iso(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
-const state = { year: now.getFullYear(), month: now.getMonth() + 1, selected: todayIso, items: [] };
+const state = { year: now.getFullYear(), month: now.getMonth() + 1, selected: todayIso, items: [], prevItems: [] }; // prevItems: 지난달(통계 비교용)
 
 function iconEl(category, subcategory) {
   const [, catEmoji, color] = catInfo(category);
@@ -38,16 +38,25 @@ function notice(msg) {
   $('notice').hidden = !msg;
 }
 
+async function fetchMonth(y, m) {
+  const res = await fetch(`/api/expenses?month=${y}-${pad(m)}`);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return (await res.json()).filter(e => e.type !== 'INCOME'); // 예전에 적은 수입은 숨김
+}
+
 async function load() {
   $('month-label').textContent = `${state.year}년 ${state.month}월`;
+  const prev = new Date(state.year, state.month - 2, 1);
   try {
-    const res = await fetch(`/api/expenses?month=${state.year}-${pad(state.month)}`);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    state.items = (await res.json()).filter(e => e.type !== 'INCOME'); // 예전에 적은 수입은 숨김
+    [state.items, state.prevItems] = await Promise.all([
+      fetchMonth(state.year, state.month),
+      fetchMonth(prev.getFullYear(), prev.getMonth() + 1),
+    ]);
     notice('');
   } catch {
     // 서버가 꺼져 있어도 달력은 그린다
     state.items = [];
+    state.prevItems = [];
     notice('서버에 연결하지 못했어요. 앱(서버)이 켜져 있는지 확인해 주세요.');
   }
   render();
@@ -119,13 +128,31 @@ function renderDay() {
   }));
 }
 
+// 분류별 합계 { 교통: 18500, ... }. 세부 분류는 큰 분류로 묶는다.
+const byCategory = items => items.reduce((g, e) => ((g[e.category] = (g[e.category] || 0) + e.amount), g), {});
+
+// 지난달 대비 증감 표시. 더 쓰면 ▲(빨강), 덜 쓰면 ▼(초록)
+function diffEl(diff, long = false) {
+  const el = document.createElement(long ? 'p' : 'small');
+  el.className = 'diff ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : 'same');
+  const amount = won(Math.abs(diff));
+  el.textContent = long
+    ? (diff > 0 ? `지난달보다 ${amount} 더 썼어요` : diff < 0 ? `지난달보다 ${amount} 덜 썼어요` : '지난달과 같아요')
+    : (diff > 0 ? `▲ ${amount}` : diff < 0 ? `▼ ${amount}` : '변화 없음');
+  if (!long) el.setAttribute('aria-label', diff > 0 ? `지난달보다 ${amount} 늘었어요` : diff < 0 ? `지난달보다 ${amount} 줄었어요` : '지난달과 같아요');
+  return el;
+}
+
 function renderStats() {
   const items = state.items;
-  const total = sum(items);
-  const groups = Object.entries(items.reduce((g, e) => ((g[e.category] = (g[e.category] || 0) + e.amount), g), {}))
-    .sort((a, b) => b[1] - a[1]);
+  const total = sum(items), prevTotal = sum(state.prevItems);
+  const cur = byCategory(items), old = byCategory(state.prevItems);
+  // 이번 달에 쓴 분류(큰 순) + 지난달에만 쓴 분류(이번 달 0원)
+  const groups = Object.entries(cur).sort((a, b) => b[1] - a[1])
+    .concat(Object.keys(old).filter(c => !(c in cur)).sort((a, b) => old[b] - old[a]).map(c => [c, 0]));
   $('stats-caption').textContent = `${state.month}월에 쓴 돈`;
   $('stats-total').textContent = won(total);
+  $('stats-diff').replaceChildren(total || prevTotal ? diffEl(total - prevTotal, true) : '');
 
   let acc = 0;
   const stops = groups.map(([cat, amt]) => {
@@ -134,7 +161,7 @@ function renderStats() {
     return `${catInfo(cat)[2]} ${start}% ${acc / total * 100}%`;
   });
   $('donut').style.background = total ? `conic-gradient(${stops.join(',')})` : '';
-  const pct = amt => Math.round(amt / total * 100) + '%';
+  const pct = amt => (total ? Math.round(amt / total * 100) : 0) + '%';
   $('donut-label').textContent = total ? '가장 큰 지출' : '';
   $('donut-name').textContent = total ? groups[0][0] : '내역 없음';
   $('donut-pct').textContent = total ? pct(groups[0][1]) : '';
@@ -152,9 +179,10 @@ function renderStats() {
     const value = document.createElement('span');
     value.className = 'amt';
     value.textContent = won(amt);
+    value.append(diffEl(amt - (old[cat] || 0)));
     const bar = document.createElement('span');
     bar.className = 'bar';
-    bar.innerHTML = `<i style="width:${amt / total * 100}%;background:${catInfo(cat)[2]}"></i>`;
+    bar.innerHTML = `<i style="width:${total ? amt / total * 100 : 0}%;background:${catInfo(cat)[2]}"></i>`;
     li.append(iconEl(cat), name, value, bar);
     return li;
   }));

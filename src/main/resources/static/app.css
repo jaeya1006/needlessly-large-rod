@@ -1,9 +1,9 @@
 :root {
   --bg: #f6f7f9; --card: #fff; --fg: #1f2328; --muted: #8a919a; --line: #e6e8eb;
-  --accent: #e8590c; --expense: #e8590c; --sun: #e03131; --sat: #1c7ed6;
+  --accent: #e8590c; --expense: #e8590c; --sun: #e03131; --sat: #1c7ed6; --down: #2f9e44;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #0d1117; --card: #161b22; --fg: #e6edf3; --muted: #8b949e; --line: #30363d; --sun: #ff6b6b; --sat: #4dabf7; }
+  :root { --bg: #0d1117; --card: #161b22; --fg: #e6edf3; --muted: #8b949e; --line: #30363d; --sun: #ff6b6b; --sat: #4dabf7; --down: #51cf66; }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -49,7 +49,7 @@ input { font: inherit; color: inherit; }
 /* 통계 */
 .card { background: var(--card); margin: 16px; border-radius: 20px; padding: 20px; }
 .stats-caption { margin: 0; text-align: center; color: var(--muted); }
-.stats-total { margin: 4px 0 20px; text-align: center; font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stats-total { margin: 4px 0 4px; text-align: center; font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .donut { width: min(240px, 70vw); aspect-ratio: 1; margin: 0 auto; border-radius: 50%; display: grid; place-items: center; background: var(--line); }
 .donut-hole { width: 62%; aspect-ratio: 1; border-radius: 50%; background: var(--card); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .donut-hole span { color: var(--muted); font-size: .8rem; }
@@ -95,3 +95,10 @@ input { font: inherit; color: inherit; }
 #view-calendar { padding-bottom: 80px; } /* + 버튼이 마지막 내역을 가리지 않게 */
 .notice { margin: 0; padding: 10px 16px; background: #fff4e6; color: #a33b00; font-size: .9rem; text-align: center; }
 @media (prefers-color-scheme: dark) { .notice { background: #3b2410; color: #ffc078; } }
+/* 지난달 대비 증감 */
+#stats-diff { min-height: 1.4em; margin-bottom: 16px; text-align: center; }
+.diff { margin: 0; font-size: .85rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.legend .diff { display: block; text-align: right; font-size: .75rem; }
+.diff.up { color: var(--sun); }
+.diff.down { color: var(--down); }
+.diff.same { color: var(--muted); font-weight: 400; }
