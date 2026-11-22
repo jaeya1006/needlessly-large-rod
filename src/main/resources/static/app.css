@@ -102,3 +102,17 @@ input { font: inherit; color: inherit; }
 .diff.up { color: var(--sun); }
 .diff.down { color: var(--down); }
 .diff.same { color: var(--muted); font-weight: 400; }
+/* 지난달 비교 카드: 늘어난·줄어든 TOP 2, 항상 비교 */
+.card-title { margin: 0 0 12px; font-size: 1rem; }
+.movers { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.movers h3 { margin: 0 0 4px; }
+.mini { list-style: none; margin: 0; padding: 0; }
+.mini li { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 10px; padding: 8px 0; }
+.mini .icon { width: 36px; height: 36px; font-size: 1rem; }
+.mini .name small { display: block; color: var(--muted); font-size: .75rem; }
+.mini .empty { display: block; color: var(--muted); font-size: .85rem; }
+.watch-pick { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+.watch-pick summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 8px; }
+.checks label { display: flex; align-items: center; gap: 6px; font-size: .85rem; cursor: pointer; }
+.checks .icon { width: 28px; height: 28px; font-size: .9rem; }
