@@ -116,3 +116,11 @@ input { font: inherit; color: inherit; }
 .checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 8px; }
 .checks label { display: flex; align-items: center; gap: 6px; font-size: .85rem; cursor: pointer; }
 .checks .icon { width: 28px; height: 28px; font-size: .9rem; }
+/* 정부 혜택 추천 */
+.profile { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.profile label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); }
+.profile input, .profile select { font: inherit; color: var(--fg); background: var(--bg); padding: 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.small-btn { grid-column: 1 / -1; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font-weight: 600; }
+.benefit li { grid-template-columns: 36px 1fr; align-items: start; }
+.benefit a { color: var(--accent); font-weight: 600; }
+.next-btn:disabled { opacity: .5; }

@@ -387,6 +387,63 @@ $('delete-entry').onclick = async () => {
   load();
 };
 
+// 정부 혜택 추천: 조건(출생연도·시도·상태) 저장 → 서버가 공공데이터 + Claude로 추천
+const profileForm = $('profile-form');
+profileForm.birthYear.max = now.getFullYear(); // 서버도 올해보다 늦은 연도는 거부한다
+
+async function loadProfile() {
+  const res = await fetch('/api/profile').catch(() => null);
+  if (!res?.ok) return; // 아직 입력 안 함(404) 또는 서버 꺼짐
+  const p = await res.json();
+  profileForm.birthYear.value = p.birthYear ?? '';
+  profileForm.region.value = p.region ?? '';
+  profileForm.status.value = p.status ?? '';
+}
+
+profileForm.onsubmit = async ev => {
+  ev.preventDefault();
+  const body = { birthYear: Number(profileForm.birthYear.value), region: profileForm.region.value, status: profileForm.status.value };
+  const res = await fetch('/api/profile', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).catch(() => null);
+  $('benefit-msg').textContent = res?.ok ? '조건을 저장했어요.' : '조건을 저장하지 못했어요. 입력을 확인해 주세요.';
+};
+
+const BENEFIT_MESSAGES = {
+  NO_KEYS: m => `API 키가 아직 없어요. 프로젝트 폴더의 .env에 ${m.join(', ')} 값을 넣고 앱을 다시 실행해 주세요.`,
+  NO_PROFILE: () => '위 조건을 먼저 저장해 주세요.',
+  NO_WATCHED: () => "'항상 비교하는 분류'에서 분류를 먼저 체크해 주세요.",
+};
+
+$('recommend-btn').onclick = async () => {
+  const btn = $('recommend-btn');
+  btn.disabled = true;
+  $('benefit-msg').textContent = '정부 혜택을 찾고 있어요. 1분쯤 걸릴 수 있어요…';
+  $('benefit-list').replaceChildren();
+  const res = await fetch('/api/recommendations').catch(() => null);
+  btn.disabled = false;
+  if (res?.status === 429) { $('benefit-msg').textContent = '이미 추천을 찾는 중이에요. 잠시 뒤 다시 시도해 주세요.'; return; }
+  if (!res?.ok) { $('benefit-msg').textContent = '혜택 정보를 가져오지 못했어요. 잠시 뒤 다시 시도해 주세요.'; return; }
+  const r = await res.json();
+  if (BENEFIT_MESSAGES[r.status]) { $('benefit-msg').textContent = BENEFIT_MESSAGES[r.status](r.missing); return; }
+  const skipped = r.unsupported.length ? ` (${r.unsupported.join(', ')}은 혜택을 찾지 않는 분류예요)` : '';
+  $('benefit-msg').textContent = (r.items.length ? `${r.items.length}개를 찾았어요. 신청 전 원문에서 대상을 꼭 확인하세요.` : '조건에 맞는 혜택을 찾지 못했어요.') + skipped;
+  $('benefit-list').replaceChildren(...r.items.map(b => {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.className = 'name';
+    // 링크는 공공데이터 원본 주소. http(s)만 허용
+    const title = /^https?:\/\//.test(b.url || '') ? Object.assign(document.createElement('a'), { href: b.url, target: '_blank', rel: 'noopener' }) : document.createElement('strong');
+    title.textContent = b.name;
+    const why = document.createElement('small');
+    why.textContent = `${b.category} · ${b.reason}${b.agency ? ' · ' + b.agency : ''}`;
+    name.append(title, why);
+    li.append(iconEl(b.category), name);
+    return li;
+  }));
+};
+
 load();
 loadWatched();
+loadProfile();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
