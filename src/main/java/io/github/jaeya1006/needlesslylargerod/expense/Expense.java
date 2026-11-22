@@ -1,6 +1,8 @@
 package io.github.jaeya1006.needlesslylargerod.expense;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -15,22 +17,31 @@ import java.time.LocalDate;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Expense {
 
+    public enum Type { EXPENSE, INCOME }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String title;
+    @Enumerated(EnumType.STRING)
+    private Type type;
+
+    private String title; // 내역, 비어 있으면 화면에서 분류 이름을 보여 줌
 
     private long amount; // 원 단위 정수
 
     private String category;
 
+    private String memo;
+
     private LocalDate spentAt;
 
-    public Expense(String title, long amount, String category, LocalDate spentAt) {
+    public Expense(Type type, String title, long amount, String category, String memo, LocalDate spentAt) {
+        this.type = type;
         this.title = title;
         this.amount = amount;
         this.category = category;
+        this.memo = memo;
         this.spentAt = spentAt;
     }
 }

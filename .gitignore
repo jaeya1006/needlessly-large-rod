@@ -35,3 +35,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### 로컬 비밀 값 (DB 계정 등) ###
+.env

@@ -2,84 +2,86 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#e8590c">
   <title>쓸데없이 큰 지출</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon.svg">
-  <style>
-    :root { --bg:#fff; --fg:#1f2328; --muted:#6e7781; --line:#d0d7de; --accent:#e8590c; }
-    @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; } }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--fg); }
-    main { max-width:480px; margin:0 auto; padding:16px; }
-    h1 { font-size:1.25rem; margin:0 0 4px; }
-    .total { color:var(--muted); margin:0 0 16px; }
-    .total strong { color:var(--accent); font-size:1.5rem; }
-    form { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
-    input, select, button { font:inherit; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); min-width:0; }
-    #title { grid-column:1 / -1; }
-    button[type=submit] { grid-column:1 / -1; background:var(--accent); color:#fff; border:0; font-weight:600; }
-    ul { list-style:none; padding:0; margin:0; }
-    li { display:flex; align-items:center; gap:8px; padding:12px 0; border-bottom:1px solid var(--line); }
-    li .info { flex:1; min-width:0; }
-    li .meta { color:var(--muted); font-size:.85rem; }
-    li .amount { font-weight:600; white-space:nowrap; }
-    li button { padding:4px 10px; }
-    .error { color:#cf222e; min-height:1.2em; margin:0 0 8px; }
-  </style>
+  <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-<main>
-  <h1>쓸데없이 큰 지출</h1>
-  <p class="total">총 지출 <strong id="total">0원</strong></p>
+<header class="top">
+  <button class="nav-btn" id="prev" aria-label="이전 달">‹</button>
+  <h1 id="month-label"></h1>
+  <button class="nav-btn" id="next" aria-label="다음 달">›</button>
+</header>
 
-  <form id="form">
-    <input id="title" name="title" placeholder="어디에 썼나요?" aria-label="내용" required maxlength="100">
-    <input name="amount" type="number" inputmode="numeric" min="1" placeholder="금액(원)" aria-label="금액" required>
-    <select name="category" aria-label="분류">
-      <option>식비</option><option>카페</option><option>쇼핑</option><option>교통</option><option>생활</option><option>기타</option>
-    </select>
-    <input name="spentAt" type="date" aria-label="날짜" required>
-    <button type="submit">적기</button>
-  </form>
-  <p class="error" id="error" role="alert"></p>
-
-  <ul id="list"></ul>
+<!-- 달력 -->
+<main id="view-calendar" class="view">
+  <section class="summary">
+    <div><span>수입</span><strong class="income" id="sum-income">0원</strong></div>
+    <div><span>지출</span><strong class="expense" id="sum-expense">0원</strong></div>
+    <div><span>합계</span><strong id="sum-net">0원</strong></div>
+  </section>
+  <div class="weekdays"><span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span></div>
+  <div class="calendar" id="calendar"></div>
+  <section class="day">
+    <div class="day-head"><span id="day-label"></span><span class="expense" id="day-total"></span></div>
+    <ul class="entries" id="day-list"></ul>
+  </section>
+  <button class="fab" id="add" aria-label="새로 적기">+</button>
 </main>
-<script>
-  const won = n => n.toLocaleString('ko-KR') + '원';
-  const form = document.getElementById('form');
-  const errorEl = document.getElementById('error');
-  form.spentAt.valueAsDate = new Date();
 
-  async function load() {
-    const items = await (await fetch('/api/expenses')).json();
-    document.getElementById('total').textContent = won(items.reduce((s, e) => s + e.amount, 0));
-    const list = document.getElementById('list');
-    list.replaceChildren(...items.map(e => {
-      const li = document.createElement('li');
-      li.innerHTML = '<div class="info"><div class="t"></div><div class="meta"></div></div><span class="amount"></span><button aria-label="삭제">삭제</button>';
-      li.querySelector('.t').textContent = e.title;
-      li.querySelector('.meta').textContent = e.spentAt + ' · ' + e.category;
-      li.querySelector('.amount').textContent = won(e.amount);
-      li.querySelector('button').onclick = async () => { await fetch('/api/expenses/' + e.id, { method: 'DELETE' }); load(); };
-      return li;
-    }));
-  }
+<!-- 통계 -->
+<main id="view-stats" class="view" hidden>
+  <div class="toggle" role="tablist">
+    <button role="tab" data-type="EXPENSE" aria-selected="true">지출</button>
+    <button role="tab" data-type="INCOME" aria-selected="false">수입</button>
+  </div>
+  <section class="card">
+    <p class="stats-caption" id="stats-caption"></p>
+    <p class="stats-total" id="stats-total"></p>
+    <div class="donut" id="donut"><div class="donut-hole"><span id="donut-label"></span><strong id="donut-name"></strong><em id="donut-pct"></em></div></div>
+  </section>
+  <ul class="card legend" id="legend"></ul>
+</main>
 
-  form.onsubmit = async ev => {
-    ev.preventDefault();
-    const body = Object.fromEntries(new FormData(form));
-    body.amount = Number(body.amount);
-    const res = await fetch('/api/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    errorEl.textContent = res.ok ? '' : '저장하지 못했어요. 입력을 확인해 주세요.';
-    if (res.ok) { form.title.value = ''; form.amount.value = ''; form.title.focus(); load(); }
-  };
+<nav class="tabbar">
+  <button data-view="calendar" aria-current="page"><span aria-hidden="true">📅</span>달력</button>
+  <button data-view="stats"><span aria-hidden="true">📊</span>통계</button>
+</nav>
 
-  load();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
-</script>
+<!-- 입력 시트: 1단계 금액, 2단계 분류 -->
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="새로 적기">
+  <div class="step" id="step1">
+    <div class="sheet-head">
+      <input type="date" id="entry-date" aria-label="날짜">
+      <button class="icon-btn" data-close aria-label="닫기">✕</button>
+    </div>
+    <label class="amount-row">
+      <span aria-hidden="true">₩</span>
+      <input id="entry-amount" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="금액">
+    </label>
+    <div class="type-btns">
+      <button class="btn-income" data-type="INCOME">입금</button>
+      <button class="btn-expense" data-type="EXPENSE">지출</button>
+    </div>
+  </div>
+  <div class="step" id="step2" hidden>
+    <div class="sheet-head">
+      <button class="icon-btn" id="back" aria-label="뒤로">←</button>
+      <strong id="step2-amount"></strong>
+      <button class="icon-btn" data-close aria-label="닫기">✕</button>
+    </div>
+    <input id="entry-title" class="line-input" placeholder="내역 (비우면 분류 이름)" maxlength="100">
+    <input id="entry-memo" class="line-input" placeholder="메모" maxlength="500">
+    <p class="hint">분류를 누르면 저장돼요</p>
+    <div class="cat-grid" id="cat-grid"></div>
+    <p class="error" id="error" role="alert"></p>
+  </div>
+</div>
+
+<script src="/app.js"></script>
 </body>
 </html>
