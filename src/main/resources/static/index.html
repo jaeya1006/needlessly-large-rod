@@ -21,9 +21,7 @@
 <!-- 달력 -->
 <main id="view-calendar" class="view">
   <section class="summary">
-    <div><span>수입</span><strong class="income" id="sum-income">0원</strong></div>
-    <div><span>지출</span><strong class="expense" id="sum-expense">0원</strong></div>
-    <div><span>합계</span><strong id="sum-net">0원</strong></div>
+    <div><span>이번 달 지출</span><strong class="expense" id="sum-expense">0원</strong></div>
   </section>
   <div class="weekdays"><span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span></div>
   <div class="calendar" id="calendar"></div>
@@ -36,10 +34,6 @@
 
 <!-- 통계 -->
 <main id="view-stats" class="view" hidden>
-  <div class="toggle" role="tablist">
-    <button role="tab" data-type="EXPENSE" aria-selected="true">지출</button>
-    <button role="tab" data-type="INCOME" aria-selected="false">수입</button>
-  </div>
   <section class="card">
     <p class="stats-caption" id="stats-caption"></p>
     <p class="stats-total" id="stats-total"></p>
@@ -64,10 +58,7 @@
       <span aria-hidden="true">₩</span>
       <input id="entry-amount" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="금액">
     </label>
-    <div class="type-btns">
-      <button class="btn-income" data-type="INCOME">입금</button>
-      <button class="btn-expense" data-type="EXPENSE">지출</button>
-    </div>
+    <button class="next-btn" id="next-step">다음</button>
   </div>
   <div class="step" id="step2" hidden>
     <div class="sheet-head">
