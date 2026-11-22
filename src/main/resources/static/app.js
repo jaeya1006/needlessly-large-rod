@@ -112,13 +112,8 @@ function renderDay() {
     amt.className = 'amt expense';
     amt.textContent = won(e.amount);
     b.append(iconEl(e.category, e.subcategory), name, amt);
-    b.setAttribute('aria-label', `${label} ${won(e.amount)}, 눌러서 삭제`);
-    b.onclick = async () => {
-      if (!confirm(`'${label}' ${won(e.amount)}을 삭제할까요?`)) return;
-      const res = await fetch('/api/expenses/' + e.id, { method: 'DELETE' }).catch(() => null);
-      if (!res?.ok) { notice('삭제하지 못했어요. 잠시 뒤 다시 시도해 주세요.'); return; }
-      load();
-    };
+    b.setAttribute('aria-label', `${label} ${won(e.amount)}, 눌러서 수정`);
+    b.onclick = () => openSheet(e);
     li.append(b);
     return li;
   }));
@@ -188,12 +183,18 @@ document.querySelectorAll('.tabbar button').forEach(b => b.onclick = () => {
 const amountInput = $('entry-amount');
 const amountValue = () => Number(amountInput.value.replace(/\D/g, ''));
 
-function openSheet() {
-  $('entry-date').value = state.selected;
-  amountInput.value = '';
-  $('entry-title').value = '';
-  $('entry-memo').value = '';
+let editing = null; // 수정 중인 내역, 새로 적을 때는 null
+
+// entry를 주면 그 내역을 수정, 없으면 새로 적기
+function openSheet(entry = null) {
+  editing = entry;
+  $('entry-date').value = entry?.spentAt || state.selected;
+  amountInput.value = entry ? entry.amount.toLocaleString('ko-KR') : '';
+  $('entry-title').value = entry?.title || '';
+  $('entry-memo').value = entry?.memo || '';
   $('error').textContent = '';
+  $('delete-entry').hidden = !entry;
+  $('sheet').setAttribute('aria-label', entry ? '내역 수정' : '새로 적기');
   showStep(1);
   $('sheet').hidden = false;
   updateNextButton();
@@ -208,7 +209,7 @@ function updateNextButton() {
   $('next-step').disabled = !amountValue();
 }
 
-$('add').onclick = openSheet;
+$('add').onclick = () => openSheet(); // 클릭 이벤트가 entry로 넘어가지 않게
 document.querySelectorAll('[data-close]').forEach(b => b.onclick = closeSheet);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
 amountInput.oninput = () => {
@@ -220,11 +221,14 @@ amountInput.onkeydown = e => { if (e.key === 'Enter' && amountValue()) goStep2()
 
 let pickedCategory = null; // 세부 분류를 고르는 중이면 그 큰 분류
 
+const saveWord = () => editing ? '수정' : '저장';
+
 function showCategories() {
   pickedCategory = null;
-  $('cat-hint').textContent = '분류를 누르면 저장돼요';
+  $('cat-hint').textContent = `분류를 누르면 ${saveWord()}돼요`;
   $('cat-grid').replaceChildren(...CATEGORIES.map(([name]) => {
     const b = document.createElement('button');
+    b.setAttribute('aria-pressed', editing?.category === name); // 수정할 때 지금 분류 표시
     b.append(iconEl(name), name);
     b.onclick = () => SUBCATEGORIES[name] ? showSubcategories(name) : save(name);
     return b;
@@ -233,9 +237,10 @@ function showCategories() {
 
 function showSubcategories(category) {
   pickedCategory = category;
-  $('cat-hint').textContent = `${category} › 세부 분류를 누르면 저장돼요`;
+  $('cat-hint').textContent = `${category} › 세부 분류를 누르면 ${saveWord()}돼요`;
   $('cat-grid').replaceChildren(...SUBCATEGORIES[category].map(([name]) => {
     const b = document.createElement('button');
+    b.setAttribute('aria-pressed', editing?.category === category && editing?.subcategory === name);
     b.append(iconEl(category, name), name);
     b.onclick = () => save(category, name);
     return b;
@@ -259,8 +264,8 @@ $('back').onclick = () => {
 
 async function save(category, subcategory = null) {
   const spentAt = $('entry-date').value;
-  const res = await fetch('/api/expenses', {
-    method: 'POST',
+  const res = await fetch(editing ? `/api/expenses/${editing.id}` : '/api/expenses', {
+    method: editing ? 'PUT' : 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       type: 'EXPENSE', title: $('entry-title').value, amount: amountValue(),
@@ -268,13 +273,22 @@ async function save(category, subcategory = null) {
     }),
   }).catch(() => null);
   if (!res) { $('error').textContent = '서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.'; return; }
-  if (!res.ok) { $('error').textContent = '저장하지 못했어요. 입력을 확인해 주세요.'; return; }
+  if (!res.ok) { $('error').textContent = `${saveWord()}하지 못했어요. 입력을 확인해 주세요.`; return; }
   closeSheet();
   // 다른 달 날짜로 적었으면 그 달로 이동
   const [y, m] = spentAt.split('-').map(Number);
   state.year = y; state.month = m; state.selected = spentAt;
   load();
 }
+
+$('delete-entry').onclick = async () => {
+  const label = editing.title || editing.subcategory || editing.category;
+  if (!confirm(`'${label}' ${won(editing.amount)}을 삭제할까요?`)) return;
+  const res = await fetch('/api/expenses/' + editing.id, { method: 'DELETE' }).catch(() => null);
+  closeSheet();
+  if (!res?.ok) { notice('삭제하지 못했어요. 잠시 뒤 다시 시도해 주세요.'); return; }
+  load();
+};
 
 load();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');

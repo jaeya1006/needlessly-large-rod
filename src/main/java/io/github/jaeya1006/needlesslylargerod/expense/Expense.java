@@ -47,4 +47,14 @@ public class Expense {
         this.memo = memo;
         this.spentAt = spentAt;
     }
+
+    public void update(Type type, String title, long amount, String category, String subcategory, String memo, LocalDate spentAt) {
+        this.type = type;
+        this.title = title;
+        this.amount = amount;
+        this.category = category;
+        this.subcategory = subcategory;
+        this.memo = memo;
+        this.spentAt = spentAt;
+    }
 }
