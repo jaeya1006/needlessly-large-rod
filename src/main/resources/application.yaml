@@ -1,6 +1,8 @@
 spring:
   application:
     name: needlessly-large-rod
+  config:
+    import: optional:file:.env[.properties] # 프로젝트 루트의 .env(DB_USERNAME, DB_PASSWORD 등)를 읽음, 없으면 무시
   datasource:
     url: ${DB_URL:jdbc:mariadb://localhost:3306/needlessly_large_rod}
     username: ${DB_USERNAME:root}

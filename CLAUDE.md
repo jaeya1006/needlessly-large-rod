@@ -17,6 +17,7 @@
 - 2026-11-22 · 프로젝트 이름은 **'쓸데없이 큰 지출'**, 가계부 앱이다.
 - 2026-11-22 · 앱과 웹을 모두 지원하는 **앱웹(PWA)**으로 만든다. Spring Boot가 `src/main/resources/static`의 화면을 그대로 제공하고, 별도 프론트엔드 빌드는 두지 않는다.
 - 2026-11-22 · 백엔드: Spring Boot 4 + Java 21 + JPA + MariaDB. DB 없이 돌릴 때는 `h2` 프로필을 쓴다.
+- 2026-11-22 · 로컬 DB는 dart-insight와 분리한 새 DB `needlessly_large_rod`와 전용 계정 `nlr`을 쓴다. 계정 값은 프로젝트 루트의 `.env`(git 제외)에 두고 `spring.config.import`로 읽는다. (#6)
 - 2026-11-22 · Spring AI 벡터 저장소는 임베딩 모델을 붙일 때까지 꺼 둔다(`spring.ai.vectorstore.type: none`).
 - 2026-11-22 · 위플 가계부(withweple.com)는 **학습용 참고**로만 쓴다. 기능 아이디어는 참고하되 코드, 디자인, 문구, 브랜드는 베끼지 않고 새로 만든다.
 
