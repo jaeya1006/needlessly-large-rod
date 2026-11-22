@@ -97,3 +97,5 @@ input { font: inherit; color: inherit; }
 .cat-grid .icon { width: 56px; height: 56px; font-size: 1.6rem; }
 .error { color: var(--sun); min-height: 1.2em; }
 #view-calendar { padding-bottom: 80px; } /* + 버튼이 마지막 내역을 가리지 않게 */
+.notice { margin: 0; padding: 10px 16px; background: #fff4e6; color: #a33b00; font-size: .9rem; text-align: center; }
+@media (prefers-color-scheme: dark) { .notice { background: #3b2410; color: #ffc078; } }
