@@ -41,6 +41,16 @@ class ExpenseControllerTest {
     }
 
     @Test
+    void savesSubcategory() throws Exception {
+        String taxi = create("{\"type\":\"EXPENSE\",\"amount\":15000,\"category\":\"교통\",\"subcategory\":\"택시\",\"spentAt\":\"2024-03-01\"}");
+        String plain = create("{\"type\":\"EXPENSE\",\"amount\":3000,\"category\":\"카페\",\"subcategory\":\" \",\"spentAt\":\"2024-03-01\"}");
+
+        mvc.perform(get("/api/expenses").param("month", "2024-03"))
+                .andExpect(jsonPath("$[?(@.id == " + taxi + ")].subcategory").value("택시"))
+                .andExpect(jsonPath("$[?(@.id == " + plain + ")].subcategory").value((Object) null));
+    }
+
+    @Test
     void filtersByMonth() throws Exception {
         String oct = create("{\"type\":\"INCOME\",\"amount\":3000000,\"category\":\"월급\",\"spentAt\":\"2025-10-31\"}");
         String nov = create("{\"type\":\"EXPENSE\",\"amount\":1000,\"category\":\"간식\",\"spentAt\":\"2025-11-01\"}");

@@ -25,6 +25,7 @@ public class ExpenseController {
             @Size(max = 100) String title,
             @Positive long amount,
             @NotBlank @Size(max = 30) String category,
+            @Size(max = 30) String subcategory,
             @Size(max = 500) String memo,
             @NotNull LocalDate spentAt) {
     }
@@ -40,7 +41,7 @@ public class ExpenseController {
     @ResponseStatus(HttpStatus.CREATED)
     public Expense create(@Valid @RequestBody ExpenseRequest req) {
         return repository.save(new Expense(req.type(), blankToNull(req.title()), req.amount(),
-                req.category(), blankToNull(req.memo()), req.spentAt()));
+                req.category(), blankToNull(req.subcategory()), blankToNull(req.memo()), req.spentAt()));
     }
 
     @DeleteMapping("/{id}")

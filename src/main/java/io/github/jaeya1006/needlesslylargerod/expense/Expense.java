@@ -32,15 +32,18 @@ public class Expense {
 
     private String category;
 
+    private String subcategory; // 세부 분류(예: 교통 > 택시), 없으면 null
+
     private String memo;
 
     private LocalDate spentAt;
 
-    public Expense(Type type, String title, long amount, String category, String memo, LocalDate spentAt) {
+    public Expense(Type type, String title, long amount, String category, String subcategory, String memo, LocalDate spentAt) {
         this.type = type;
         this.title = title;
         this.amount = amount;
         this.category = category;
+        this.subcategory = subcategory;
         this.memo = memo;
         this.spentAt = spentAt;
     }
