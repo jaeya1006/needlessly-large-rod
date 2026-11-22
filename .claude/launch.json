@@ -4,8 +4,8 @@
     {
       "name": "app-h2",
       "runtimeExecutable": "./gradlew",
-      "runtimeArgs": ["bootRun", "--args=--spring.profiles.active=h2"],
-      "port": 8081
+      "runtimeArgs": ["bootRun", "--args=--spring.profiles.active=h2 --server.port=8082"],
+      "port": 8082
     }
   ]
 }
