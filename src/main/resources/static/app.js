@@ -19,7 +19,7 @@ const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
 const now = new Date();
 const todayIso = iso(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
-const state = { year: now.getFullYear(), month: now.getMonth() + 1, selected: todayIso, items: [], prevItems: [] }; // prevItems: 지난달(통계 비교용)
+const state = { year: now.getFullYear(), month: now.getMonth() + 1, selected: todayIso, items: [], prevItems: [], watched: [] }; // prevItems: 지난달, watched: 항상 비교할 분류(서버 저장)
 
 function iconEl(category, subcategory) {
   const [, catEmoji, color] = catInfo(category);
@@ -128,6 +128,73 @@ function renderDay() {
   }));
 }
 
+const prevMonthNum = () => (state.month + 10) % 12 + 1;
+
+// 작은 비교 줄: 아이콘 · 분류 · "10월 X원 → 11월 Y원" · ▲/▼
+function compareRow(cat, now, before) {
+  const li = document.createElement('li');
+  const name = document.createElement('span');
+  name.className = 'name';
+  name.textContent = cat;
+  const sub = document.createElement('small');
+  sub.textContent = `${prevMonthNum()}월 ${won(before)} → ${state.month}월 ${won(now)}`;
+  name.append(sub);
+  li.append(iconEl(cat), name, diffEl(now - before));
+  return li;
+}
+
+function emptyRow(text) {
+  const li = document.createElement('li');
+  li.className = 'empty';
+  li.textContent = text;
+  return li;
+}
+
+// 가장 많이 늘어난 2개 vs 가장 많이 줄어든 2개
+function renderMovers(cur, old) {
+  const diffs = [...new Set([...Object.keys(cur), ...Object.keys(old)])]
+    .map(c => [c, (cur[c] || 0) - (old[c] || 0)]);
+  const up = diffs.filter(d => d[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 2);
+  const down = diffs.filter(d => d[1] < 0).sort((a, b) => a[1] - b[1]).slice(0, 2);
+  const rows = list => list.length ? list.map(([c]) => compareRow(c, cur[c] || 0, old[c] || 0)) : [emptyRow('없어요')];
+  $('movers-up').replaceChildren(...rows(up));
+  $('movers-down').replaceChildren(...rows(down));
+}
+
+// 체크한 분류: 두 달 다 0원이어도 항상 보여 준다
+function renderWatched(cur, old) {
+  $('watch-list').replaceChildren(...(state.watched.length
+    ? state.watched.map(c => compareRow(c, cur[c] || 0, old[c] || 0))
+    : [emptyRow('아래 \'분류 고르기\'에서 체크하면 매달 여기서 비교해요')]));
+  $('watch-checks').replaceChildren(...CATEGORIES.map(([name]) => {
+    const label = document.createElement('label');
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.value = name;
+    box.checked = state.watched.includes(name);
+    box.onchange = saveWatched;
+    label.append(box, iconEl(name), name);
+    return label;
+  }));
+}
+
+async function loadWatched() {
+  const res = await fetch('/api/watched-categories').catch(() => null);
+  if (res?.ok) { state.watched = await res.json(); renderStats(); }
+}
+
+async function saveWatched() {
+  const picked = [...document.querySelectorAll('#watch-checks input:checked')].map(b => b.value);
+  const res = await fetch('/api/watched-categories', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(picked),
+  }).catch(() => null);
+  if (res?.ok) { state.watched = await res.json(); notice(''); }
+  else notice('체크한 분류를 저장하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+  const open = document.querySelector('.watch-pick').open;
+  renderStats(); // 실패하면 저장된 상태로 체크가 되돌아간다
+  document.querySelector('.watch-pick').open = open;
+}
+
 // 분류별 합계 { 교통: 18500, ... }. 세부 분류는 큰 분류로 묶는다.
 const byCategory = items => items.reduce((g, e) => ((g[e.category] = (g[e.category] || 0) + e.amount), g), {});
 
@@ -153,6 +220,8 @@ function renderStats() {
   $('stats-caption').textContent = `${state.month}월에 쓴 돈`;
   $('stats-total').textContent = won(total);
   $('stats-diff').replaceChildren(total || prevTotal ? diffEl(total - prevTotal, true) : '');
+  renderMovers(cur, old);
+  renderWatched(cur, old);
 
   let acc = 0;
   const stops = groups.map(([cat, amt]) => {
@@ -319,4 +388,5 @@ $('delete-entry').onclick = async () => {
 };
 
 load();
+loadWatched();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
