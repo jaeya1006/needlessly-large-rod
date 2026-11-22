@@ -18,7 +18,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
-import java.util.Optional;
 
 /** 액세스 토큰(JWT, 30분)과 리프레시 토큰(무작위 문자열, 14일)을 만들고 쿠키에 담는다. */
 @Service
@@ -31,7 +30,13 @@ public class TokenService {
     static final Duration REFRESH_TTL = Duration.ofDays(14);
     private static final String REFRESH_PATH = "/api/auth"; // 리프레시 쿠키는 갱신·로그아웃 요청에만 실린다
 
+    /** 이 시간 안에 이미 교체된 토큰이 또 오면 탈취가 아니라 다른 탭의 동시 갱신으로 본다 */
+    static final Duration REUSE_GRACE = Duration.ofSeconds(30);
+
     private static final SecureRandom RANDOM = new SecureRandom();
+
+    /** 갱신 결과. GRACE: 다른 탭이 방금 갱신함 → 쿠키를 지우지 말고 다시 시도하게 */
+    public enum RefreshResult { OK, GRACE, INVALID }
 
     private final JwtEncoder encoder;
     private final RefreshTokenRepository refreshTokens;
@@ -51,25 +56,30 @@ public class TokenService {
      * 이미 무효화된 토큰이 다시 오면 탈취로 보고 그 회원의 리프레시 토큰을 모두 무효화한다.
      */
     @Transactional
-    public Optional<Member> rotate(String raw, HttpServletRequest req, HttpServletResponse res) {
-        if (raw == null || raw.isBlank()) return Optional.empty();
-        RefreshToken t = refreshTokens.findByTokenHash(hash(raw)).orElse(null);
-        if (t == null) return Optional.empty();
-        if (t.isRevoked()) {
-            refreshTokens.revokeAll(t.getMemberId());
-            return Optional.empty();
+    public RefreshResult rotate(String raw, HttpServletRequest req, HttpServletResponse res) {
+        if (raw == null || raw.isBlank()) return RefreshResult.INVALID;
+        String hash = hash(raw);
+        RefreshToken t = refreshTokens.findByTokenHash(hash).orElse(null);
+        if (t == null) return RefreshResult.INVALID;
+        Instant now = Instant.now();
+        if (t.expiredAt(now)) return RefreshResult.INVALID;
+        if (refreshTokens.rotate(hash, now) == 0) { // 이미 쓰인 토큰
+            RefreshToken used = refreshTokens.findByTokenHash(hash).orElseThrow();
+            boolean justRotated = used.getRotatedAt() != null && now.isBefore(used.getRotatedAt().plus(REUSE_GRACE));
+            if (justRotated) return RefreshResult.GRACE;
+            refreshTokens.revokeAll(t.getMemberId()); // 오래전에 쓴 토큰이 또 옴 → 탈취로 보고 전부 무효화
+            return RefreshResult.INVALID;
         }
-        if (t.expiredAt(Instant.now())) return Optional.empty();
-        t.revoke();
-        Optional<Member> member = members.findById(t.getMemberId());
-        member.ifPresent(m -> issue(m, req, res));
-        return member;
+        Member member = members.findById(t.getMemberId()).orElse(null);
+        if (member == null) return RefreshResult.INVALID;
+        issue(member, req, res);
+        return RefreshResult.OK;
     }
 
     @Transactional
     public void revoke(String raw) {
         if (raw == null || raw.isBlank()) return;
-        refreshTokens.findByTokenHash(hash(raw)).ifPresent(RefreshToken::revoke);
+        refreshTokens.revoke(hash(raw));
     }
 
     public void clearCookies(HttpServletRequest req, HttpServletResponse res) {
@@ -80,7 +90,7 @@ public class TokenService {
     String accessToken(Member member) {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
-                .issuer("needlessly-large-rod")
+                .issuer(SecurityConfig.ISSUER)
                 .subject(String.valueOf(member.getId()))
                 .claim("email", member.getEmail())
                 .issuedAt(now)

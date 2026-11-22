@@ -17,9 +17,11 @@ const $ = id => document.getElementById(id);
 // ---------- 로그인 ----------
 // 토큰은 HttpOnly 쿠키라 자바스크립트에서 볼 수 없다. 401이 오면 리프레시로 한 번 갱신해 보고, 안 되면 로그인 화면.
 let refreshing = null; // 여러 요청이 동시에 401을 받아도 갱신은 한 번만
+let session = 0; // 로그인·로그아웃할 때마다 +1. 이전 계정으로 보낸 요청의 응답이 늦게 와도 화면에 넣지 않는다
 function refreshOnce() {
+  // 409: 다른 탭이 방금 갱신해서 브라우저에 이미 새 쿠키가 있다 → 성공처럼 보고 다시 요청
   refreshing ??= fetch('/api/auth/refresh', { method: 'POST' })
-    .then(r => r.ok).catch(() => false).finally(() => { refreshing = null; });
+    .then(r => r.ok || r.status === 409).catch(() => false).finally(() => { refreshing = null; });
   return refreshing;
 }
 
@@ -62,15 +64,19 @@ async function fetchMonth(y, m) {
 }
 
 async function load() {
+  const mine = session;
   $('month-label').textContent = `${state.year}년 ${state.month}월`;
   const prev = new Date(state.year, state.month - 2, 1);
   try {
-    [state.items, state.prevItems] = await Promise.all([
+    const [items, prevItems] = await Promise.all([
       fetchMonth(state.year, state.month),
       fetchMonth(prev.getFullYear(), prev.getMonth() + 1),
     ]);
+    if (mine !== session) return;
+    [state.items, state.prevItems] = [items, prevItems];
     notice('');
   } catch {
+    if (mine !== session) return;
     // 서버가 꺼져 있어도 달력은 그린다
     state.items = [];
     state.prevItems = [];
@@ -196,8 +202,9 @@ function renderWatched(cur, old) {
 }
 
 async function loadWatched() {
+  const mine = session;
   const res = await api('/api/watched-categories').catch(() => null);
-  if (res?.ok) { state.watched = await res.json(); renderStats(); }
+  if (res?.ok) { const list = await res.json(); if (mine !== session) return; state.watched = list; renderStats(); }
 }
 
 async function saveWatched() {
@@ -409,9 +416,11 @@ const profileForm = $('profile-form');
 profileForm.birthYear.max = now.getFullYear(); // 서버도 올해보다 늦은 연도는 거부한다
 
 async function loadProfile() {
+  const mine = session;
   const res = await api('/api/profile').catch(() => null);
-  if (!res?.ok) return; // 아직 입력 안 함(404) 또는 서버 꺼짐
+  if (!res?.ok || mine !== session) return; // 아직 입력 안 함(404) 또는 서버 꺼짐 → 빈 칸 그대로
   const p = await res.json();
+  if (mine !== session) return;
   profileForm.birthYear.value = p.birthYear ?? '';
   profileForm.region.value = p.region ?? '';
   profileForm.status.value = p.status ?? '';
@@ -495,10 +504,23 @@ authForm.onsubmit = async ev => {
   start();
 };
 
-$('logout').onclick = async () => {
-  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
+// 계정이 바뀔 때 이전 사람의 화면 값(지출·체크·혜택 조건·추천 결과·입력 시트)을 모두 비운다
+function resetMemberUi() {
+  session++;
   state.items = []; state.prevItems = []; state.watched = [];
+  profileForm.reset();
+  $('benefit-list').replaceChildren();
+  $('benefit-msg').textContent = '';
+  $('sheet').hidden = true;
+  notice('');
   render();
+}
+
+$('logout').onclick = async () => {
+  const res = await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
+  // 서버가 못 받았으면 쿠키가 살아 있어서 새로고침하면 다시 로그인된다 → 성공처럼 보이지 않게
+  if (!res?.ok) { notice('로그아웃하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.'); return; }
+  resetMemberUi();
   setAuthMode(false);
   showLogin();
 };
@@ -509,6 +531,7 @@ async function start() {
   if (res?.status === 401 && await refreshOnce()) res = await fetch('/api/auth/me').catch(() => null);
   if (!res?.ok) { showLogin(); return; }
   const me = await res.json();
+  resetMemberUi(); // 다른 계정으로 다시 로그인한 경우 대비
   $('auth').hidden = true;
   $('logout').title = `${me.email} 로그아웃`;
   load();

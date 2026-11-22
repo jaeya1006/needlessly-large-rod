@@ -32,6 +32,8 @@ public class RefreshToken {
 
     private boolean revoked;
 
+    private Instant rotatedAt; // 갱신으로 교체된 시각. 로그아웃·탈취 무효화는 비워 둔다(유예 대상 아님)
+
     public RefreshToken(Long memberId, String tokenHash, Instant expiresAt) {
         this.memberId = memberId;
         this.tokenHash = tokenHash;
@@ -40,9 +42,5 @@ public class RefreshToken {
 
     public boolean expiredAt(Instant now) {
         return !now.isBefore(expiresAt);
-    }
-
-    public void revoke() {
-        this.revoked = true;
     }
 }

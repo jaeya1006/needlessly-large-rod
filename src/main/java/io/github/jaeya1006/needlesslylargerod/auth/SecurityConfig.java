@@ -12,12 +12,17 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CsrfFilter;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -25,7 +30,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.HexFormat;
+import java.util.Objects;
 
 @Configuration
 public class SecurityConfig {
@@ -33,12 +40,14 @@ public class SecurityConfig {
     private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
     /** 로그인 없이 부를 수 있는 API. 나머지 /api/** 는 로그인 필요, 화면 파일은 누구나. */
+    static final String ISSUER = "needlessly-large-rod";
+
     static final String[] PUBLIC_API = {"/api/auth/signup", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout"};
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, BearerTokenResolver resolver) throws Exception {
         http
-                // 토큰은 SameSite 쿠키라 다른 사이트에서 보낸 POST/PUT/DELETE에는 실리지 않는다
+                // CSRF 토큰 대신: 쿠키는 SameSite, 그리고 SameOriginFilter가 다른 출처의 POST/PUT/DELETE를 막는다
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .formLogin(f -> f.disable())
@@ -47,6 +56,7 @@ public class SecurityConfig {
                         .requestMatchers(PUBLIC_API).permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
+                .addFilterBefore(new SameOriginFilter(), CsrfFilter.class)
                 .oauth2ResourceServer(o -> o.bearerTokenResolver(resolver).jwt(Customizer.withDefaults()));
         return http.build();
     }
@@ -80,7 +90,12 @@ public class SecurityConfig {
 
     @Bean
     JwtDecoder jwtDecoder(SecretKey jwtKey) {
-        return NimbusJwtDecoder.withSecretKey(jwtKey).macAlgorithm(MacAlgorithm.HS256).build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(jwtKey).macAlgorithm(MacAlgorithm.HS256).build();
+        // 기본 검사(만료·nbf)에 더해 우리가 발급한 토큰인지(iss), 만료 시각이 꼭 있는지(exp) 본다
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefaultWithIssuer(ISSUER),
+                new JwtClaimValidator<Instant>(JwtClaimNames.EXP, Objects::nonNull)));
+        return decoder;
     }
 
     static byte[] sha256(String s) {

@@ -6,10 +6,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
 import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,6 +30,12 @@ class AuthFlowTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    JdbcTemplate jdbc;
+
+    @Autowired
+    JwtEncoder encoder;
 
     static String body(String email, String password) {
         return "{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}";
@@ -74,13 +87,47 @@ class AuthFlowTest {
         Cookie first = cookie(signup("rotate@example.com"), TokenService.REFRESH_COOKIE);
 
         MockHttpServletResponse rotated = mvc.perform(post("/api/auth/refresh").cookie(first))
-                .andExpect(status().isOk()).andReturn().getResponse();
+                .andExpect(status().isNoContent()).andReturn().getResponse();
         Cookie second = cookie(rotated, TokenService.REFRESH_COOKIE);
         assertThat(second.getValue()).isNotEqualTo(first.getValue());
 
-        // 이미 쓴 토큰을 다시 쓰면(탈취 의심) 거절하고 새 토큰까지 모두 무효화
+        // 곧바로 같은 토큰이 또 오면 다른 탭의 동시 갱신 → 409, 쿠키를 지우지 않고 새 토큰도 살아 있다
+        MockHttpServletResponse grace = mvc.perform(post("/api/auth/refresh").cookie(first))
+                .andExpect(status().isConflict()).andReturn().getResponse();
+        assertThat(grace.getHeaders("Set-Cookie")).isEmpty();
+
+        // 유예 시간이 지난 뒤 옛 토큰이 또 오면 탈취로 보고 새 토큰까지 모두 무효화
+        int aged = jdbc.update("UPDATE refresh_token SET rotated_at = ? WHERE rotated_at IS NOT NULL",
+                java.sql.Timestamp.from(Instant.now().minusSeconds(3600)));
+        assertThat(aged).isPositive();
         mvc.perform(post("/api/auth/refresh").cookie(first)).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/auth/refresh").cookie(second)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void rejectsTooLongPasswordInBytes() throws Exception {
+        // 25글자지만 한글이라 75바이트 → BCrypt 한도(72바이트) 초과
+        mvc.perform(post("/api/auth/signup").contentType(MediaType.APPLICATION_JSON).content(body("long@example.com", "가".repeat(25))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/auth/signup").contentType(MediaType.APPLICATION_JSON).content(body("long@example.com", "가".repeat(24))))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void blocksCrossSiteWrites() throws Exception {
+        mvc.perform(post("/api/auth/logout").header("Origin", "https://evil.example")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/auth/login").header("Sec-Fetch-Site", "cross-site").contentType(MediaType.APPLICATION_JSON)
+                .content(body("x@example.com", "password123"))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/auth/logout").header("Origin", "http://localhost")).andExpect(status().isNoContent());
+    }
+
+    @Test
+    void rejectsTokenFromAnotherIssuer() throws Exception {
+        signup("issuer@example.com");
+        JwtClaimsSet claims = JwtClaimsSet.builder().issuer("someone-else").subject("1")
+                .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(600)).build();
+        String token = encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
+        mvc.perform(get("/api/auth/me").cookie(new Cookie(TokenService.ACCESS_COOKIE, token))).andExpect(status().isUnauthorized());
     }
 
     @Test

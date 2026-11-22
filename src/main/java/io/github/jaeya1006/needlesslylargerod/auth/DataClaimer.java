@@ -31,7 +31,9 @@ public class DataClaimer {
 
     @Transactional
     public void claimIfFirst(long memberId) {
-        if (members.count() != 1) return;
+        // '첫 회원' = id가 가장 작은 회원. 거의 동시에 둘이 가입해도 한 명만 넘겨받는다.
+        boolean first = members.findFirstByOrderByIdAsc().map(m -> m.getId() == memberId).orElse(false);
+        if (!first) return;
         int moved = expenses.claimOwnerless(memberId);
         int watched = copyLegacyWatched(memberId);
         boolean profile = moveLegacyProfile(memberId);
