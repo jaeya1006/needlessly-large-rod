@@ -37,6 +37,9 @@ class ProfileAndRecommendationTest {
         mvc.perform(put("/api/profile").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"birthYear\":1800,\"region\":\"서울\",\"status\":\"직장인\"}"))
                 .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/profile").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"birthYear\":" + (java.time.Year.now().getValue() + 1) + ",\"region\":\"서울\",\"status\":\"직장인\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

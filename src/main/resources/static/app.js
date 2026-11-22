@@ -389,6 +389,7 @@ $('delete-entry').onclick = async () => {
 
 // 정부 혜택 추천: 조건(출생연도·시도·상태) 저장 → 서버가 공공데이터 + Claude로 추천
 const profileForm = $('profile-form');
+profileForm.birthYear.max = now.getFullYear(); // 서버도 올해보다 늦은 연도는 거부한다
 
 async function loadProfile() {
   const res = await fetch('/api/profile').catch(() => null);
@@ -421,6 +422,7 @@ $('recommend-btn').onclick = async () => {
   $('benefit-list').replaceChildren();
   const res = await fetch('/api/recommendations').catch(() => null);
   btn.disabled = false;
+  if (res?.status === 429) { $('benefit-msg').textContent = '이미 추천을 찾는 중이에요. 잠시 뒤 다시 시도해 주세요.'; return; }
   if (!res?.ok) { $('benefit-msg').textContent = '혜택 정보를 가져오지 못했어요. 잠시 뒤 다시 시도해 주세요.'; return; }
   const r = await res.json();
   if (BENEFIT_MESSAGES[r.status]) { $('benefit-msg').textContent = BENEFIT_MESSAGES[r.status](r.missing); return; }

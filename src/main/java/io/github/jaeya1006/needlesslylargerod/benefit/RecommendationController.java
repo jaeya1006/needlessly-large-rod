@@ -52,10 +52,13 @@ public class RecommendationController {
         if (categories.isEmpty()) return Response.of("NO_WATCHED");
 
         List<String> unsupported = categories.stream().filter(c -> !BenefitCandidates.supports(c)).toList();
+        List<String> supported = categories.stream().filter(BenefitCandidates::supports).toList();
+        // 술·쇼핑처럼 찾지 않는 분류만 체크했으면 공공데이터를 부를 필요가 없다
+        if (supported.isEmpty()) return new Response("OK", List.of(), unsupported, List.of());
         Map<String, List<GovService>> candidates = new LinkedHashMap<>();
         try {
             List<GovService> all = gov.all();
-            for (String c : categories) {
+            for (String c : supported) {
                 List<GovService> picked = BenefitCandidates.pick(all, c, p.getRegion(), CANDIDATES_PER_CATEGORY);
                 if (!picked.isEmpty()) candidates.put(c, picked);
             }
@@ -63,8 +66,14 @@ public class RecommendationController {
             int age = Year.now().getValue() - p.getBirthYear();
             return new Response("OK", List.of(), unsupported,
                     recommender.recommend(age, p.getRegion(), p.getStatus(), candidates));
+        } catch (BenefitRecommender.BusyException e) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, e.getMessage());
+        } catch (IllegalStateException e) {
+            // 우리가 만든 안내 문구라 그대로 보여 줘도 된다
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, e.getMessage(), e);
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "혜택 정보를 가져오지 못했어요: " + e.getMessage(), e);
+            // HTTP 오류 메시지에는 serviceKey가 든 요청 주소가 섞일 수 있어 그대로 내보내지 않는다
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "혜택 정보를 가져오지 못했어요", e);
         }
     }
 }

@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Year;
 import java.util.List;
 
 @RestController
@@ -38,6 +39,9 @@ public class ProfileController {
 
     @PutMapping
     public UserProfile save(@Valid @RequestBody ProfileRequest req) {
+        if (req.birthYear() > Year.now().getValue()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "출생연도가 올해보다 늦을 수 없어요");
+        }
         UserProfile p = repository.findById(UserProfile.ID).orElseGet(() -> new UserProfile(null, null, null));
         p.update(req.birthYear(), req.region(), req.status());
         return repository.save(p);

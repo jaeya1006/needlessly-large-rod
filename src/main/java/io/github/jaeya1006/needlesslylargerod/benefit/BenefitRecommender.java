@@ -10,10 +10,12 @@ import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Semaphore;
 
 /** Claude가 후보 혜택 중에서 사용자 조건에 맞는 것을 고른다. 후보에 없는 혜택은 버린다. */
 @Component
@@ -44,10 +46,26 @@ public class BenefitRecommender {
     public record Recommendation(String category, String serviceId, String name, String reason, String url, String agency) {
     }
 
+    /** 유료 호출이 한꺼번에 몰리지 않게 동시에 2개까지만 */
+    static final int MAX_CONCURRENT = 2;
+
+    /** 동시 호출 한도를 넘었을 때 */
+    public static class BusyException extends RuntimeException {
+        BusyException() {
+            super("이미 추천을 찾는 중이에요. 잠시 뒤 다시 시도해 주세요");
+        }
+    }
+
     private final AnthropicClient client;
+    private final Semaphore slots = new Semaphore(MAX_CONCURRENT);
 
     public BenefitRecommender(@Value("${ANTHROPIC_API_KEY:}") String apiKey) {
-        this.client = apiKey.isBlank() ? null : AnthropicOkHttpClient.builder().apiKey(apiKey.strip()).build();
+        // SDK 기본값(10분, 재시도 2회)이면 요청 스레드를 너무 오래 잡는다
+        this.client = apiKey.isBlank() ? null : AnthropicOkHttpClient.builder()
+                .apiKey(apiKey.strip())
+                .timeout(Duration.ofSeconds(90))
+                .maxRetries(1)
+                .build();
     }
 
     public boolean hasKey() {
@@ -55,6 +73,15 @@ public class BenefitRecommender {
     }
 
     public List<Recommendation> recommend(int age, String region, String status, Map<String, List<GovService>> candidates) {
+        if (!slots.tryAcquire()) throw new BusyException();
+        try {
+            return ask(age, region, status, candidates);
+        } finally {
+            slots.release();
+        }
+    }
+
+    private List<Recommendation> ask(int age, String region, String status, Map<String, List<GovService>> candidates) {
         StructuredMessageCreateParams<Picks> params = MessageCreateParams.builder()
                 .model(MODEL)
                 .maxTokens(16000L)
