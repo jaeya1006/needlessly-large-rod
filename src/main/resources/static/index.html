@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e8590c">
+  <title>쓸데없이 큰 지출</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <style>
+    :root { --bg:#fff; --fg:#1f2328; --muted:#6e7781; --line:#d0d7de; --accent:#e8590c; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; } }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--fg); }
+    main { max-width:480px; margin:0 auto; padding:16px; }
+    h1 { font-size:1.25rem; margin:0 0 4px; }
+    .total { color:var(--muted); margin:0 0 16px; }
+    .total strong { color:var(--accent); font-size:1.5rem; }
+    form { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+    input, select, button { font:inherit; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); min-width:0; }
+    #title { grid-column:1 / -1; }
+    button[type=submit] { grid-column:1 / -1; background:var(--accent); color:#fff; border:0; font-weight:600; }
+    ul { list-style:none; padding:0; margin:0; }
+    li { display:flex; align-items:center; gap:8px; padding:12px 0; border-bottom:1px solid var(--line); }
+    li .info { flex:1; min-width:0; }
+    li .meta { color:var(--muted); font-size:.85rem; }
+    li .amount { font-weight:600; white-space:nowrap; }
+    li button { padding:4px 10px; }
+    .error { color:#cf222e; min-height:1.2em; margin:0 0 8px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>쓸데없이 큰 지출</h1>
+  <p class="total">총 지출 <strong id="total">0원</strong></p>
+
+  <form id="form">
+    <input id="title" name="title" placeholder="어디에 썼나요?" aria-label="내용" required maxlength="100">
+    <input name="amount" type="number" inputmode="numeric" min="1" placeholder="금액(원)" aria-label="금액" required>
+    <select name="category" aria-label="분류">
+      <option>식비</option><option>카페</option><option>쇼핑</option><option>교통</option><option>생활</option><option>기타</option>
+    </select>
+    <input name="spentAt" type="date" aria-label="날짜" required>
+    <button type="submit">적기</button>
+  </form>
+  <p class="error" id="error" role="alert"></p>
+
+  <ul id="list"></ul>
+</main>
+<script>
+  const won = n => n.toLocaleString('ko-KR') + '원';
+  const form = document.getElementById('form');
+  const errorEl = document.getElementById('error');
+  form.spentAt.valueAsDate = new Date();
+
+  async function load() {
+    const items = await (await fetch('/api/expenses')).json();
+    document.getElementById('total').textContent = won(items.reduce((s, e) => s + e.amount, 0));
+    const list = document.getElementById('list');
+    list.replaceChildren(...items.map(e => {
+      const li = document.createElement('li');
+      li.innerHTML = '<div class="info"><div class="t"></div><div class="meta"></div></div><span class="amount"></span><button aria-label="삭제">삭제</button>';
+      li.querySelector('.t').textContent = e.title;
+      li.querySelector('.meta').textContent = e.spentAt + ' · ' + e.category;
+      li.querySelector('.amount').textContent = won(e.amount);
+      li.querySelector('button').onclick = async () => { await fetch('/api/expenses/' + e.id, { method: 'DELETE' }); load(); };
+      return li;
+    }));
+  }
+
+  form.onsubmit = async ev => {
+    ev.preventDefault();
+    const body = Object.fromEntries(new FormData(form));
+    body.amount = Number(body.amount);
+    const res = await fetch('/api/expenses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    errorEl.textContent = res.ok ? '' : '저장하지 못했어요. 입력을 확인해 주세요.';
+    if (res.ok) { form.title.value = ''; form.amount.value = ''; form.title.focus(); load(); }
+  };
+
+  load();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+</script>
+</body>
+</html>

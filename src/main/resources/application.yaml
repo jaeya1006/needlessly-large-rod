@@ -1,3 +1,24 @@
 spring:
   application:
     name: needlessly-large-rod
+  datasource:
+    url: ${DB_URL:jdbc:mariadb://localhost:3306/needlessly_large_rod}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+  ai:
+    vectorstore:
+      type: none # 임베딩 모델(OpenAI 등)을 추가하기 전까지 끔. 안 끄면 앱이 시작되지 않음
+  jpa:
+    hibernate:
+      ddl-auto: update # shortcut: 스키마 자동 생성, 운영 전에 Flyway 같은 마이그레이션으로 교체
+
+---
+# DB 없이 실행/테스트용: --spring.profiles.active=h2
+spring:
+  config:
+    activate:
+      on-profile: h2
+  datasource:
+    url: jdbc:h2:mem:nlr;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
