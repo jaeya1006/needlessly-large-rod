@@ -31,6 +31,7 @@ public class ExpenseController {
             @NotBlank @Size(max = 30) String category,
             @Size(max = 30) String subcategory,
             @Size(max = 500) String memo,
+            Boolean wasted, // 없으면: 새로 적을 때 false, 수정할 때 그대로
             @NotNull LocalDate spentAt) {
     }
 
@@ -45,8 +46,10 @@ public class ExpenseController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public Expense create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ExpenseRequest req) {
-        return repository.save(new Expense(CurrentMember.id(jwt), req.type(), blankToNull(req.title()), req.amount(),
-                req.category(), blankToNull(req.subcategory()), blankToNull(req.memo()), req.spentAt()));
+        Expense e = new Expense(CurrentMember.id(jwt), req.type(), blankToNull(req.title()), req.amount(),
+                req.category(), blankToNull(req.subcategory()), blankToNull(req.memo()), req.spentAt());
+        e.markWasted(Boolean.TRUE.equals(req.wasted()));
+        return repository.save(e);
     }
 
     @PutMapping("/{id}")
@@ -55,6 +58,19 @@ public class ExpenseController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         e.update(req.type(), blankToNull(req.title()), req.amount(),
                 req.category(), blankToNull(req.subcategory()), blankToNull(req.memo()), req.spentAt());
+        if (req.wasted() != null) e.markWasted(req.wasted());
+        return repository.save(e);
+    }
+
+    public record WastedRequest(@NotNull Boolean wasted) {
+    }
+
+    /** 목록에서 바로 '쓸데없었다'만 켜고 끄기 */
+    @PatchMapping("/{id}/wasted")
+    public Expense markWasted(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id, @Valid @RequestBody WastedRequest req) {
+        Expense e = repository.findByIdAndOwnerId(id, CurrentMember.id(jwt))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        e.markWasted(req.wasted());
         return repository.save(e);
     }
 
