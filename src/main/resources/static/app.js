@@ -38,7 +38,7 @@ const iso = (y, m, d) => `${y}-${pad(m)}-${pad(d)}`;
 const now = new Date();
 const todayIso = iso(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
-const state = { year: now.getFullYear(), month: now.getMonth() + 1, selected: todayIso, items: [], prevItems: [], watched: [] }; // prevItems: 지난달, watched: 항상 비교할 분류(서버 저장)
+const state = { year: now.getFullYear(), month: now.getMonth() + 1, selected: todayIso, items: [], prevItems: [], watched: [], big: 50000 }; // prevItems: 지난달, watched: 항상 비교할 분류, big: 큰 지출 기준(서버 저장)
 
 function iconEl(category, subcategory) {
   const [, catEmoji, color] = catInfo(category);
@@ -86,6 +86,7 @@ async function load() {
 }
 
 const sum = items => items.reduce((s, e) => s + e.amount, 0);
+const isBig = e => e.amount >= state.big;
 
 function render() {
   $('sum-expense').textContent = won(sum(state.items));
@@ -106,14 +107,34 @@ function renderCalendar() {
     const weekday = (first + d - 1) % 7;
     const b = document.createElement('button');
     b.setAttribute('aria-pressed', date === state.selected);
-    b.setAttribute('aria-label', `${state.month}월 ${d}일` + (ex ? `, 지출 ${won(ex)}` : ''));
+    const big = dayItems.some(isBig);
+    b.setAttribute('aria-label', `${state.month}월 ${d}일` + (ex ? `, 지출 ${won(ex)}` : '') + (big ? ', 큰 지출 있음' : ''));
     if (date === todayIso) b.classList.add('today');
+    if (big) b.classList.add('has-big');
     b.innerHTML = `<span class="d ${weekday === 0 ? 'sun' : weekday === 6 ? 'sat' : ''}">${d}</span>`
       + (ex ? `<small class="expense">${ex.toLocaleString('ko-KR')}</small>` : '');
     b.onclick = () => { state.selected = date; renderCalendar(); renderDay(); };
     cells.push(b);
   }
   $('calendar').replaceChildren(...cells);
+}
+
+function badge(text, kind) {
+  const el = document.createElement('em');
+  el.className = 'badge ' + kind;
+  el.textContent = text;
+  return el;
+}
+
+async function toggleWasted(e) {
+  const res = await api(`/api/expenses/${e.id}/wasted`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wasted: !e.wasted }),
+  }).catch(() => null);
+  if (!res?.ok) { notice('표시를 바꾸지 못했어요. 잠시 뒤 다시 시도해 주세요.'); return; }
+  const updated = await res.json();
+  state.items = state.items.map(x => x.id === updated.id ? updated : x);
+  renderDay();
+  renderStats();
 }
 
 function renderDay() {
@@ -135,6 +156,8 @@ function renderDay() {
     const label = e.title || e.subcategory || e.category;
     const path = e.title ? [e.category, e.subcategory].filter(Boolean).join(' › ') : e.subcategory ? e.category : null;
     name.textContent = label;
+    if (isBig(e)) name.append(badge('큰 지출', 'big'));
+    if (e.wasted) name.append(badge('쓸데없었음', 'wasted'));
     if (path || e.memo) {
       const sub = document.createElement('small');
       sub.textContent = [path, e.memo].filter(Boolean).join(' · ');
@@ -146,10 +169,66 @@ function renderDay() {
     b.append(iconEl(e.category, e.subcategory), name, amt);
     b.setAttribute('aria-label', `${label} ${won(e.amount)}, 눌러서 수정`);
     b.onclick = () => openSheet(e);
-    li.append(b);
+    // 목록에서 바로 '쓸데없었다' 켜고 끄기
+    const t = document.createElement('button');
+    t.className = 'wasted-toggle';
+    t.textContent = '😅';
+    t.setAttribute('aria-pressed', e.wasted);
+    t.setAttribute('aria-label', e.wasted ? '쓸데없었음 표시 끄기' : '쓸데없었다고 표시하기');
+    t.onclick = () => toggleWasted(e);
+    li.append(b, t);
     return li;
   }));
 }
+
+// 쓸데없었던 지출 합계(지난달 대비)와 큰 지출 TOP 5
+function renderWastedAndBig() {
+  const wasted = state.items.filter(e => e.wasted), prevWasted = state.prevItems.filter(e => e.wasted);
+  $('wasted-total').textContent = won(sum(wasted));
+  $('wasted-count').textContent = wasted.length ? `${wasted.length}건 · 이번 달 지출의 ${Math.round(sum(wasted) / Math.max(sum(state.items), 1) * 100)}%` : '아직 표시한 지출이 없어요. 내역의 😅를 눌러 표시해요.';
+  $('wasted-diff').replaceChildren(wasted.length || prevWasted.length ? diffEl(sum(wasted) - sum(prevWasted), true) : '');
+
+  $('big-caption').textContent = `${won(state.big)} 이상`;
+  const top = state.items.filter(isBig).sort((a, b) => b.amount - a.amount).slice(0, 5);
+  $('big-list').replaceChildren(...(top.length ? top.map(e => {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = e.title || e.subcategory || e.category;
+    if (e.wasted) name.append(badge('쓸데없었음', 'wasted'));
+    const sub = document.createElement('small');
+    sub.textContent = `${Number(e.spentAt.slice(5, 7))}월 ${Number(e.spentAt.slice(8))}일 · ${e.category}`;
+    name.append(sub);
+    const amt = document.createElement('strong');
+    amt.className = 'expense';
+    amt.textContent = won(e.amount);
+    li.append(iconEl(e.category, e.subcategory), name, amt);
+    return li;
+  }) : [emptyRow('이번 달에는 큰 지출이 없어요')]));
+  if (document.activeElement !== $('big-form').threshold) $('big-form').threshold.value = state.big;
+}
+
+async function loadSettings() {
+  const mine = session;
+  const res = await api('/api/settings').catch(() => null);
+  if (!res?.ok) return;
+  const s = await res.json();
+  if (mine !== session) return;
+  state.big = s.bigExpenseThreshold;
+  render();
+}
+
+$('big-form').onsubmit = async ev => {
+  ev.preventDefault();
+  const value = Number(ev.target.threshold.value);
+  const res = await api('/api/settings', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bigExpenseThreshold: value }),
+  }).catch(() => null);
+  if (!res?.ok) { $('big-msg').textContent = '1,000원 ~ 1억 원 사이로 정해 주세요.'; return; }
+  state.big = (await res.json()).bigExpenseThreshold;
+  $('big-msg').textContent = `${won(state.big)} 이상을 큰 지출로 볼게요.`;
+  render();
+};
 
 const prevMonthNum = () => (state.month + 10) % 12 + 1;
 
@@ -245,6 +324,7 @@ function renderStats() {
   $('stats-total').textContent = won(total);
   $('stats-diff').replaceChildren(total || prevTotal ? diffEl(total - prevTotal, true) : '');
   renderMovers(cur, old);
+  renderWastedAndBig();
   renderWatched(cur, old);
 
   let acc = 0;
@@ -313,6 +393,7 @@ function openSheet(entry = null) {
   amountInput.value = entry ? entry.amount.toLocaleString('ko-KR') : '';
   $('entry-title').value = entry?.title || '';
   $('entry-memo').value = entry?.memo || '';
+  $('entry-wasted').checked = !!entry?.wasted;
   $('error').textContent = '';
   $('delete-entry').hidden = !entry;
   $('sheet').setAttribute('aria-label', entry ? '내역 수정' : '새로 적기');
@@ -390,7 +471,7 @@ async function save(category, subcategory = null) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       type: 'EXPENSE', title: $('entry-title').value, amount: amountValue(),
-      category, subcategory, memo: $('entry-memo').value, spentAt,
+      category, subcategory, memo: $('entry-memo').value, spentAt, wasted: $('entry-wasted').checked,
     }),
   }).catch(() => null);
   if (!res) { $('error').textContent = '서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.'; return; }
@@ -507,8 +588,9 @@ authForm.onsubmit = async ev => {
 // 계정이 바뀔 때 이전 사람의 화면 값(지출·체크·혜택 조건·추천 결과·입력 시트)을 모두 비운다
 function resetMemberUi() {
   session++;
-  state.items = []; state.prevItems = []; state.watched = [];
+  state.items = []; state.prevItems = []; state.watched = []; state.big = 50000;
   profileForm.reset();
+  $('big-msg').textContent = '';
   $('benefit-list').replaceChildren();
   $('benefit-msg').textContent = '';
   $('sheet').hidden = true;
@@ -537,6 +619,7 @@ async function start() {
   load();
   loadWatched();
   loadProfile();
+  loadSettings();
 }
 
 start();

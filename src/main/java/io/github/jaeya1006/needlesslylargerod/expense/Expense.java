@@ -40,6 +40,17 @@ public class Expense {
 
     private String memo;
 
+    @Getter(AccessLevel.NONE) // JSON에는 isWasted()로 true/false만 나간다
+    private Boolean wasted; // '쓸데없었다' 표시. null(예전 행)은 false로 본다
+
+    public boolean isWasted() {
+        return Boolean.TRUE.equals(wasted);
+    }
+
+    public void markWasted(boolean wasted) {
+        this.wasted = wasted;
+    }
+
     private LocalDate spentAt;
 
     public Expense(Long ownerId, Type type, String title, long amount, String category, String subcategory, String memo, LocalDate spentAt) {

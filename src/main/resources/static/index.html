@@ -42,6 +42,22 @@
     <div class="donut" id="donut"><div class="donut-hole"><span id="donut-label"></span><strong id="donut-name"></strong><em id="donut-pct"></em></div></div>
   </section>
   <section class="card">
+    <h2 class="card-title">😅 쓸데없었던 지출</h2>
+    <p class="stats-total small" id="wasted-total"></p>
+    <p class="hint center" id="wasted-count"></p>
+    <div id="wasted-diff"></div>
+  </section>
+  <section class="card">
+    <h2 class="card-title">큰 지출 TOP 5 <small class="hint" id="big-caption"></small></h2>
+    <ul class="mini" id="big-list"></ul>
+    <form class="big-form" id="big-form">
+      <label>큰 지출 기준<input name="threshold" type="number" inputmode="numeric" min="1000" max="100000000" step="1000" required></label>
+      <span>원 이상</span>
+      <button type="submit" class="small-btn">저장</button>
+    </form>
+    <p class="hint" id="big-msg" aria-live="polite"></p>
+  </section>
+  <section class="card">
     <h2 class="card-title">지난달보다</h2>
     <div class="movers">
       <div><h3 class="diff up">많이 늘어난 분류</h3><ul class="mini" id="movers-up"></ul></div>
@@ -99,6 +115,7 @@
     </div>
     <input id="entry-title" class="line-input" placeholder="내역 (비우면 분류 이름)" maxlength="100">
     <input id="entry-memo" class="line-input" placeholder="메모" maxlength="500">
+    <label class="check-line"><input type="checkbox" id="entry-wasted"> 😅 쓸데없었던 지출이에요</label>
     <p class="hint" id="cat-hint" aria-live="polite">분류를 누르면 저장돼요</p>
     <div class="cat-grid" id="cat-grid"></div>
     <p class="error" id="error" role="alert"></p>

@@ -6,7 +6,10 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 혜택 추천에 쓰는 사용자 조건. id = 회원 id (회원마다 한 줄). */
+/**
+ * 회원별 설정 한 줄(id = 회원 id): 혜택 추천 조건(출생연도·시도·상태)과 큰 지출 기준 금액.
+ * 회원 탈퇴 때 이 줄이 통째로 지워진다.
+ */
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -20,6 +23,18 @@ public class UserProfile {
     private String region; // 시·도, 예: 서울
 
     private String status; // 학생, 직장인, 구직자 ...
+
+    private Long bigExpenseThreshold; // 이 금액 이상이면 '큰 지출'. null이면 기본값
+
+    public static final long DEFAULT_BIG_EXPENSE = 50_000;
+
+    public long bigExpenseThreshold() {
+        return bigExpenseThreshold == null ? DEFAULT_BIG_EXPENSE : bigExpenseThreshold;
+    }
+
+    public void changeBigExpenseThreshold(long amount) {
+        this.bigExpenseThreshold = amount;
+    }
 
     public UserProfile(Long memberId, Integer birthYear, String region, String status) {
         this.id = memberId;
