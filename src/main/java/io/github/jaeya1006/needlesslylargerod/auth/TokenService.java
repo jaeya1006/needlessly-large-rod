@@ -76,6 +76,12 @@ public class TokenService {
         return RefreshResult.OK;
     }
 
+    /** 다른 기기의 로그인을 모두 끊는다(비밀번호 변경 후) */
+    @Transactional
+    public void revokeAll(long memberId) {
+        refreshTokens.revokeAll(memberId);
+    }
+
     @Transactional
     public void revoke(String raw) {
         if (raw == null || raw.isBlank()) return;
@@ -93,6 +99,7 @@ public class TokenService {
                 .issuer(SecurityConfig.ISSUER)
                 .subject(String.valueOf(member.getId()))
                 .claim("email", member.getEmail())
+                .claim(SecurityConfig.VERSION_CLAIM, member.tokenVersion())
                 .issuedAt(now)
                 .expiresAt(now.plus(ACCESS_TTL))
                 .build();

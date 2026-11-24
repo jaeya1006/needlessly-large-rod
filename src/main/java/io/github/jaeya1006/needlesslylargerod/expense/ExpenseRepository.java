@@ -17,6 +17,10 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
 
     Optional<Expense> findByIdAndOwnerId(Long id, Long ownerId);
 
+    @Modifying
+    @Query("delete from Expense e where e.ownerId = :ownerId")
+    int deleteByOwner(@Param("ownerId") Long ownerId);
+
     /** 로그인 기능 전에 쌓인(주인 없는) 지출을 넘긴다 */
     @Modifying
     @Query("update Expense e set e.ownerId = :ownerId where e.ownerId is null")

@@ -13,6 +13,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimNames;
 import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -41,6 +45,7 @@ public class SecurityConfig {
 
     /** 로그인 없이 부를 수 있는 API. 나머지 /api/** 는 로그인 필요, 화면 파일은 누구나. */
     static final String ISSUER = "needlessly-large-rod";
+    static final String VERSION_CLAIM = "ver";
 
     static final String[] PUBLIC_API = {"/api/auth/signup", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout"};
 
@@ -89,13 +94,33 @@ public class SecurityConfig {
     }
 
     @Bean
-    JwtDecoder jwtDecoder(SecretKey jwtKey) {
+    JwtDecoder jwtDecoder(SecretKey jwtKey, MemberRepository members) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(jwtKey).macAlgorithm(MacAlgorithm.HS256).build();
         // 기본 검사(만료·nbf)에 더해 우리가 발급한 토큰인지(iss), 만료 시각이 꼭 있는지(exp) 본다
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 JwtValidators.createDefaultWithIssuer(ISSUER),
-                new JwtClaimValidator<Instant>(JwtClaimNames.EXP, Objects::nonNull)));
+                new JwtClaimValidator<Instant>(JwtClaimNames.EXP, Objects::nonNull),
+                stillValidFor(members)));
         return decoder;
+    }
+
+    /**
+     * 탈퇴한 회원이나 비밀번호를 바꾸기 전에 받은 토큰은 만료(30분) 전이라도 막는다.
+     * 요청마다 회원 한 명을 id로 찾는 조회가 하나 늘어난다.
+     */
+    static OAuth2TokenValidator<Jwt> stillValidFor(MemberRepository members) {
+        OAuth2Error revoked = new OAuth2Error("invalid_token", "더 이상 쓸 수 없는 로그인이에요", null);
+        return jwt -> {
+            Number ver = jwt.getClaim(VERSION_CLAIM);
+            boolean ok;
+            try {
+                ok = ver != null && members.findById(Long.parseLong(jwt.getSubject()))
+                        .map(m -> m.tokenVersion() == ver.intValue()).orElse(false);
+            } catch (NumberFormatException e) {
+                ok = false;
+            }
+            return ok ? OAuth2TokenValidatorResult.success() : OAuth2TokenValidatorResult.failure(revoked);
+        };
     }
 
     static byte[] sha256(String s) {
