@@ -83,6 +83,14 @@ class AccountTest {
     }
 
     @Test
+    void databaseRejectsDataForMissingMember() {
+        // 탈퇴 직후 늦게 도착한 쓰기 흉내: 없는 회원 id로 저장하면 외래 키가 막는다
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> expenses.saveAndFlush(new io.github.jaeya1006.needlesslylargerod.expense.Expense(
+                        987654L, io.github.jaeya1006.needlesslylargerod.expense.Expense.Type.EXPENSE, null, 1000, "카페", null, null, java.time.LocalDate.of(2024, 1, 1))))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
     void locksAfterFiveFailuresFromSameIp() throws Exception {
         signup("lock@example.com", "right-password");
         for (int i = 0; i < LoginAttemptLimiter.MAX_PER_ACCOUNT_IP; i++) {

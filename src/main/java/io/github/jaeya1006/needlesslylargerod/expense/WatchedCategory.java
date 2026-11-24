@@ -1,7 +1,12 @@
 package io.github.jaeya1006.needlesslylargerod.expense;
 
 import jakarta.persistence.Column;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Entity;
+import io.github.jaeya1006.needlesslylargerod.auth.Member;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -27,6 +32,13 @@ public class WatchedCategory {
 
     @Column(name = "owner_id", nullable = false)
     private Long ownerId;
+
+    // DB 외래 키(owner_id → member.id)만 만들려는 연결
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", insertable = false, updatable = false)
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    private Member owner;
 
     @Column(nullable = false, length = 30)
     private String category;

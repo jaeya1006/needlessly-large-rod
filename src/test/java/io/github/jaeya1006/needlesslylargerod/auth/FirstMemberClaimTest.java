@@ -37,7 +37,10 @@ class FirstMemberClaimTest {
         expenses.save(new Expense(null, Expense.Type.EXPENSE, "옛날 지출", 1000, "식비", null, null, LocalDate.of(2025, 1, 1)));
         jdbc.execute("CREATE TABLE watched_category (category VARCHAR(30) PRIMARY KEY)");
         jdbc.update("INSERT INTO watched_category VALUES ('교통'), ('카페')");
+        // 예전 조건 줄(id=1)은 회원이 생기기 전 데이터라 외래 키를 잠깐 끄고 넣는다(실제 DB의 옛 행 흉내)
+        jdbc.execute("SET REFERENTIAL_INTEGRITY FALSE");
         jdbc.update("INSERT INTO user_profile (id, birth_year, region, status) VALUES (1, 2001, '서울', '학생')");
+        jdbc.execute("SET REFERENTIAL_INTEGRITY TRUE");
 
         mvc.perform(post("/api/auth/signup").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"first@example.com\",\"password\":\"password123\"}")).andExpect(status().isCreated());

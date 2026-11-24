@@ -1,6 +1,9 @@
 package io.github.jaeya1006.needlesslylargerod.benefit;
 
+import io.github.jaeya1006.needlesslylargerod.TestMembers;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -25,6 +28,14 @@ class ProfileAndRecommendationTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    JdbcTemplate jdbc;
+
+    @BeforeEach
+    void member() {
+        TestMembers.ensure(jdbc, 103);
+    }
 
     /** 로그인한 회원 103 으로 요청 */
     static final RequestPostProcessor ME = jwt().jwt(j -> j.subject("103"));

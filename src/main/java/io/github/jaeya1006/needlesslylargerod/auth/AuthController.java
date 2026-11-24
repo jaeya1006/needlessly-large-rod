@@ -81,15 +81,12 @@ public class AuthController {
         checkPasswordBytes(c.password());
         String email = normalize(c.email());
         String ip = req.getRemoteAddr();
-        limiter.check(email, ip);
+        LoginAttemptLimiter.Attempt attempt = limiter.begin(email, ip); // 넘치면 429, 아니면 실패 1회로 미리 잡아 둔다
         Member m = members.findByEmail(email).orElse(null);
         if (dummyHash == null) dummyHash = passwordEncoder.encode("not-a-real-password");
         boolean ok = passwordEncoder.matches(c.password(), m == null ? dummyHash : m.getPasswordHash());
-        if (m == null || !ok) {
-            limiter.failed(email, ip);
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 맞지 않아요");
-        }
-        limiter.succeeded(email, ip);
+        if (m == null || !ok) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 맞지 않아요");
+        limiter.succeeded(attempt);
         tokens.issue(m, req, res);
         return new Me(m.getId(), m.getEmail());
     }
@@ -123,11 +120,11 @@ public class AuthController {
     public void changePassword(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody PasswordChange body,
                                HttpServletRequest req, HttpServletResponse res) {
         checkPasswordBytes(body.newPassword());
-        Member m = verifyPassword(jwt, body.currentPassword(), req);
-        m.changePassword(passwordEncoder.encode(body.newPassword()));
-        members.save(m);
-        tokens.revokeAll(m.getId());
-        tokens.issue(m, req, res);
+        checkPasswordBytes(body.currentPassword());
+        long id = CurrentMember.id(jwt);
+        LoginAttemptLimiter.Attempt attempt = limiter.begin("member:" + id, req.getRemoteAddr());
+        if (!deletion.changePassword(id, body.currentPassword(), body.newPassword(), req, res)) throw wrongPassword();
+        limiter.succeeded(attempt);
     }
 
     /** 회원 탈퇴: 비밀번호를 다시 확인하고 그 회원의 모든 데이터를 지운다 */
@@ -135,25 +132,17 @@ public class AuthController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteAccount(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody PasswordConfirm body,
                               HttpServletRequest req, HttpServletResponse res) {
-        Member m = verifyPassword(jwt, body.password(), req);
-        deletion.delete(m.getId());
+        checkPasswordBytes(body.password());
+        long id = CurrentMember.id(jwt);
+        LoginAttemptLimiter.Attempt attempt = limiter.begin("member:" + id, req.getRemoteAddr());
+        if (!deletion.delete(id, body.password())) throw wrongPassword();
+        limiter.succeeded(attempt);
         tokens.clearCookies(req, res);
     }
 
-    // 로그인한 회원의 비밀번호 재확인. 틀리면 403(로그인은 유지), 너무 많이 틀리면 429
-    private Member verifyPassword(Jwt jwt, String password, HttpServletRequest req) {
-        checkPasswordBytes(password);
-        long id = CurrentMember.id(jwt);
-        String account = "member:" + id;
-        String ip = req.getRemoteAddr();
-        limiter.check(account, ip);
-        Member m = members.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "다시 로그인해 주세요"));
-        if (!passwordEncoder.matches(password, m.getPasswordHash())) {
-            limiter.failed(account, ip);
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "현재 비밀번호가 맞지 않아요");
-        }
-        limiter.succeeded(account, ip);
-        return m;
+    // 로그인은 유지한 채 비밀번호만 틀림 → 403 (401이면 화면이 로그인 만료로 오해한다)
+    private static ResponseStatusException wrongPassword() {
+        return new ResponseStatusException(HttpStatus.FORBIDDEN, "현재 비밀번호가 맞지 않아요");
     }
 
     @GetMapping("/me")

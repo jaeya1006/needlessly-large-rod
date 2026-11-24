@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -12,6 +13,7 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -42,9 +44,21 @@ public class TokenService {
     private final RefreshTokenRepository refreshTokens;
     private final MemberRepository members;
 
-    /** 로그인·가입 성공: 두 토큰을 새로 만들어 쿠키로 보낸다 */
+    /**
+     * 로그인·가입 성공: 두 토큰을 새로 만들어 쿠키로 보낸다.
+     * 회원 줄을 잠근 뒤, 비밀번호를 확인할 때 본 tokenVersion이 그대로인지 다시 본다.
+     * (확인 직후 비밀번호가 바뀌었으면 옛 비밀번호로 새 토큰을 받는 일이 없게)
+     */
     @Transactional
     public void issue(Member member, HttpServletRequest req, HttpServletResponse res) {
+        Member locked = members.lockById(member.getId())
+                .filter(m -> m.tokenVersion() == member.tokenVersion())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "다시 로그인해 주세요"));
+        issueLocked(locked, req, res);
+    }
+
+    /** 이미 회원 줄을 잠근 트랜잭션 안에서 부른다 */
+    void issueLocked(Member member, HttpServletRequest req, HttpServletResponse res) {
         String access = accessToken(member);
         String refresh = randomToken();
         refreshTokens.save(new RefreshToken(member.getId(), hash(refresh), Instant.now().plus(REFRESH_TTL)));
@@ -61,6 +75,9 @@ public class TokenService {
         String hash = hash(raw);
         RefreshToken t = refreshTokens.findByTokenHash(hash).orElse(null);
         if (t == null) return RefreshResult.INVALID;
+        // 회원 줄을 먼저 잠근다(비밀번호 변경·탈퇴와 같은 순서: 회원 → 토큰) → 교착 없이 한 줄로 선다
+        Member member = members.lockById(t.getMemberId()).orElse(null);
+        if (member == null) return RefreshResult.INVALID;
         Instant now = Instant.now();
         if (t.expiredAt(now)) return RefreshResult.INVALID;
         if (refreshTokens.rotate(hash, now) == 0) { // 이미 쓰인 토큰
@@ -70,15 +87,12 @@ public class TokenService {
             refreshTokens.revokeAll(t.getMemberId()); // 오래전에 쓴 토큰이 또 옴 → 탈취로 보고 전부 무효화
             return RefreshResult.INVALID;
         }
-        Member member = members.findById(t.getMemberId()).orElse(null);
-        if (member == null) return RefreshResult.INVALID;
-        issue(member, req, res);
+        issueLocked(member, req, res);
         return RefreshResult.OK;
     }
 
-    /** 다른 기기의 로그인을 모두 끊는다(비밀번호 변경 후) */
-    @Transactional
-    public void revokeAll(long memberId) {
+    /** 다른 기기의 로그인을 모두 끊는다(회원 줄을 잠근 트랜잭션 안에서) */
+    void revokeAllLocked(long memberId) {
         refreshTokens.revokeAll(memberId);
     }
 
