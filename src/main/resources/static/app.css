@@ -142,9 +142,9 @@ input { font: inherit; color: inherit; }
 .badge.big { background: var(--sun); color: #fff; }
 .badge.wasted { background: var(--line); color: var(--fg); }
 .entries li { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
-.entries li button:first-child { flex: 1; border-bottom: 0; }
-.wasted-toggle { width: 48px; flex: none; font-size: 1.2rem; filter: grayscale(1); opacity: .45; }
-.wasted-toggle[aria-pressed="true"] { filter: none; opacity: 1; }
+.entries li button:first-child { flex: 1; min-width: 0; border-bottom: 0; }
+.entries li .wasted-toggle { width: 48px; flex: 0 0 48px; padding: 0; border-bottom: 0; justify-content: center; font-size: 1.2rem; filter: grayscale(1); opacity: .45; }
+.entries li .wasted-toggle[aria-pressed="true"] { filter: none; opacity: 1; }
 .check-line { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: .95rem; }
 .check-line input { width: 20px; height: 20px; accent-color: var(--accent); }
 .stats-total.small { font-size: 1.6rem; margin: 0; }

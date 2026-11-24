@@ -127,14 +127,22 @@ function badge(text, kind) {
 }
 
 async function toggleWasted(e) {
+  const mine = session;
   const res = await api(`/api/expenses/${e.id}/wasted`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wasted: !e.wasted }),
   }).catch(() => null);
+  if (mine !== session) return; // 그 사이 로그아웃·계정 전환
   if (!res?.ok) { notice('표시를 바꾸지 못했어요. 잠시 뒤 다시 시도해 주세요.'); return; }
   const updated = await res.json();
-  state.items = state.items.map(x => x.id === updated.id ? updated : x);
+  if (mine !== session) return;
+  // 그 사이 달을 옮겼을 수 있어서 이번 달·지난달 둘 다 맞춘다
+  const swap = list => list.map(x => x.id === updated.id ? updated : x);
+  state.items = swap(state.items);
+  state.prevItems = swap(state.prevItems);
+  renderCalendar();
   renderDay();
   renderStats();
+  document.querySelector(`.wasted-toggle[data-id="${updated.id}"]`)?.focus(); // 다시 그려도 키보드 위치 유지
 }
 
 function renderDay() {
@@ -172,9 +180,10 @@ function renderDay() {
     // 목록에서 바로 '쓸데없었다' 켜고 끄기
     const t = document.createElement('button');
     t.className = 'wasted-toggle';
+    t.dataset.id = e.id;
     t.textContent = '😅';
-    t.setAttribute('aria-pressed', e.wasted);
-    t.setAttribute('aria-label', e.wasted ? '쓸데없었음 표시 끄기' : '쓸데없었다고 표시하기');
+    t.setAttribute('aria-pressed', e.wasted); // 켜짐/꺼짐은 aria-pressed로, 이름은 고정
+    t.setAttribute('aria-label', `${label} 쓸데없었음`);
     t.onclick = () => toggleWasted(e);
     li.append(b, t);
     return li;
@@ -211,7 +220,12 @@ function renderWastedAndBig() {
 async function loadSettings() {
   const mine = session;
   const res = await api('/api/settings').catch(() => null);
-  if (!res?.ok) return;
+  if (mine !== session) return;
+  if (!res?.ok) {
+    // 기본값(5만 원)을 저장된 값처럼 보이지 않게 알린다
+    if (res?.status !== 401) $('big-msg').textContent = `큰 지출 기준을 불러오지 못해 임시로 ${won(state.big)}을 쓰고 있어요. 새로고침해 주세요.`;
+    return;
+  }
   const s = await res.json();
   if (mine !== session) return;
   state.big = s.bigExpenseThreshold;
@@ -220,12 +234,16 @@ async function loadSettings() {
 
 $('big-form').onsubmit = async ev => {
   ev.preventDefault();
+  const mine = session;
   const value = Number(ev.target.threshold.value);
   const res = await api('/api/settings', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bigExpenseThreshold: value }),
   }).catch(() => null);
-  if (!res?.ok) { $('big-msg').textContent = '1,000원 ~ 1억 원 사이로 정해 주세요.'; return; }
-  state.big = (await res.json()).bigExpenseThreshold;
+  if (mine !== session || res?.status === 401) return;
+  if (!res?.ok) { $('big-msg').textContent = res?.status === 400 ? '1,000원 ~ 1억 원 사이로 정해 주세요.' : '저장하지 못했어요. 잠시 뒤 다시 시도해 주세요.'; return; }
+  const saved = (await res.json()).bigExpenseThreshold;
+  if (mine !== session) return;
+  state.big = saved;
   $('big-msg').textContent = `${won(state.big)} 이상을 큰 지출로 볼게요.`;
   render();
 };

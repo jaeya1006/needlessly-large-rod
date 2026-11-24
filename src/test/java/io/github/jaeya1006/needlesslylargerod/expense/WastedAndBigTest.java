@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -22,6 +23,9 @@ class WastedAndBigTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    JdbcTemplate jdbc;
 
     static final RequestPostProcessor ME = jwt().jwt(j -> j.subject("301"));
     static final RequestPostProcessor OTHER = jwt().jwt(j -> j.subject("302"));
@@ -65,7 +69,25 @@ class WastedAndBigTest {
         perform(get("/api/settings"), ME).andExpect(jsonPath("$.bigExpenseThreshold").value(100000));
         perform(put("/api/settings").contentType(MediaType.APPLICATION_JSON).content("{\"bigExpenseThreshold\":10}"), ME)
                 .andExpect(status().isBadRequest());
-        // 설정만 저장해도 혜택 추천 조건은 비어 있는 상태(추천은 NO_PROFILE)
+        // 설정만 저장해도 혜택 추천 조건은 비어 있는 상태
         perform(get("/api/profile"), ME).andExpect(jsonPath("$.birthYear").isEmpty());
+        // 회원마다 따로
+        perform(get("/api/settings"), OTHER).andExpect(jsonPath("$.bigExpenseThreshold").value(50000));
+    }
+
+    @Test
+    void savingBenefitProfileKeepsThreshold() throws Exception {
+        RequestPostProcessor who = jwt().jwt(j -> j.subject("304"));
+        perform(put("/api/settings").contentType(MediaType.APPLICATION_JSON).content("{\"bigExpenseThreshold\":70000}"), who);
+        perform(put("/api/profile").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"birthYear\":2000,\"region\":\"서울\",\"status\":\"학생\"}"), who).andExpect(status().isOk());
+        perform(get("/api/settings"), who).andExpect(jsonPath("$.bigExpenseThreshold").value(70000));
+    }
+
+    @Test
+    void legacyRowWithoutWastedReadsAsFalse() throws Exception {
+        String id = create("{\"type\":\"EXPENSE\",\"amount\":5000,\"category\":\"카페\",\"spentAt\":\"2022-04-01\",\"wasted\":true}");
+        jdbc.update("UPDATE expense SET wasted = NULL WHERE id = ?", Long.parseLong(id)); // 기능 전에 저장된 행 흉내
+        perform(get("/api/expenses").param("month", "2022-04"), ME).andExpect(jsonPath("$[0].wasted").value(false));
     }
 }
