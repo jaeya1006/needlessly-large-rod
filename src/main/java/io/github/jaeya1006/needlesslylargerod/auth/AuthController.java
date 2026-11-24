@@ -32,10 +32,20 @@ public class AuthController {
     public record Me(long id, String email) {
     }
 
+    public record PasswordChange(
+            @NotBlank @Size(max = 64) String currentPassword,
+            @NotBlank @Size(min = 8, max = 64) String newPassword) {
+    }
+
+    public record PasswordConfirm(@NotBlank @Size(max = 64) String password) {
+    }
+
     private final MemberRepository members;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokens;
     private final DataClaimer claimer;
+    private final LoginAttemptLimiter limiter;
+    private final AccountDeletion deletion;
 
     // 없는 이메일로 로그인해도 비밀번호 검사 시간이 같게(가입 여부를 시간으로 알아내지 못하게)
     private volatile String dummyHash;
@@ -69,10 +79,14 @@ public class AuthController {
     @PostMapping("/login")
     public Me login(@Valid @RequestBody Credentials c, HttpServletRequest req, HttpServletResponse res) {
         checkPasswordBytes(c.password());
-        Member m = members.findByEmail(normalize(c.email())).orElse(null);
+        String email = normalize(c.email());
+        String ip = req.getRemoteAddr();
+        LoginAttemptLimiter.Attempt attempt = limiter.begin(email, ip); // 넘치면 429, 아니면 실패 1회로 미리 잡아 둔다
+        Member m = members.findByEmail(email).orElse(null);
         if (dummyHash == null) dummyHash = passwordEncoder.encode("not-a-real-password");
         boolean ok = passwordEncoder.matches(c.password(), m == null ? dummyHash : m.getPasswordHash());
         if (m == null || !ok) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 맞지 않아요");
+        limiter.succeeded(attempt);
         tokens.issue(m, req, res);
         return new Me(m.getId(), m.getEmail());
     }
@@ -98,6 +112,37 @@ public class AuthController {
                        HttpServletRequest req, HttpServletResponse res) {
         tokens.revoke(refresh);
         tokens.clearCookies(req, res);
+    }
+
+    /** 비밀번호 변경: 다른 기기의 로그인은 끊고 지금 기기는 새 토큰으로 유지 */
+    @PutMapping("/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void changePassword(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody PasswordChange body,
+                               HttpServletRequest req, HttpServletResponse res) {
+        checkPasswordBytes(body.newPassword());
+        checkPasswordBytes(body.currentPassword());
+        long id = CurrentMember.id(jwt);
+        LoginAttemptLimiter.Attempt attempt = limiter.begin("member:" + id, req.getRemoteAddr());
+        if (!deletion.changePassword(id, body.currentPassword(), body.newPassword(), req, res)) throw wrongPassword();
+        limiter.succeeded(attempt);
+    }
+
+    /** 회원 탈퇴: 비밀번호를 다시 확인하고 그 회원의 모든 데이터를 지운다 */
+    @DeleteMapping("/me")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAccount(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody PasswordConfirm body,
+                              HttpServletRequest req, HttpServletResponse res) {
+        checkPasswordBytes(body.password());
+        long id = CurrentMember.id(jwt);
+        LoginAttemptLimiter.Attempt attempt = limiter.begin("member:" + id, req.getRemoteAddr());
+        if (!deletion.delete(id, body.password())) throw wrongPassword();
+        limiter.succeeded(attempt);
+        tokens.clearCookies(req, res);
+    }
+
+    // 로그인은 유지한 채 비밀번호만 틀림 → 403 (401이면 화면이 로그인 만료로 오해한다)
+    private static ResponseStatusException wrongPassword() {
+        return new ResponseStatusException(HttpStatus.FORBIDDEN, "현재 비밀번호가 맞지 않아요");
     }
 
     @GetMapping("/me")

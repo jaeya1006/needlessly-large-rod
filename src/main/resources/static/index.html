@@ -15,7 +15,7 @@
   <button class="nav-btn" id="prev" aria-label="이전 달">‹</button>
   <h1 id="month-label"></h1>
   <button class="nav-btn" id="next" aria-label="다음 달">›</button>
-  <button class="logout" id="logout" aria-label="로그아웃">로그아웃</button>
+  <button class="logout" id="account-btn" aria-haspopup="dialog">계정</button>
 </header>
 <p class="notice" id="notice" role="alert" hidden></p>
 
@@ -102,6 +102,34 @@
     <p class="hint" id="cat-hint" aria-live="polite">분류를 누르면 저장돼요</p>
     <div class="cat-grid" id="cat-grid"></div>
     <p class="error" id="error" role="alert"></p>
+  </div>
+</div>
+
+<!-- 계정: 비밀번호 변경, 로그아웃, 회원 탈퇴 -->
+<div class="sheet" id="account" hidden role="dialog" aria-modal="true" aria-label="계정">
+  <div class="step">
+    <div class="sheet-head">
+      <strong class="sheet-title">계정</strong>
+      <button class="icon-btn" id="account-close" aria-label="닫기">✕</button>
+    </div>
+    <p class="hint" id="account-email"></p>
+    <form class="account-form" id="password-form">
+      <h2 class="card-title">비밀번호 변경</h2>
+      <input name="currentPassword" type="password" autocomplete="current-password" placeholder="현재 비밀번호" aria-label="현재 비밀번호" required maxlength="64">
+      <input name="newPassword" type="password" autocomplete="new-password" placeholder="새 비밀번호 (8자 이상)" aria-label="새 비밀번호" required minlength="8" maxlength="64">
+      <input name="confirm" type="password" autocomplete="new-password" placeholder="새 비밀번호 확인" aria-label="새 비밀번호 확인" required minlength="8" maxlength="64">
+      <button type="submit" class="small-btn">비밀번호 바꾸기</button>
+    </form>
+    <p class="hint" id="account-msg" role="alert"></p>
+    <button class="small-btn wide" id="logout">로그아웃</button>
+    <details class="danger">
+      <summary>회원 탈퇴</summary>
+      <p class="hint">지출, 체크한 분류, 혜택 조건이 모두 지워지고 되돌릴 수 없어요.</p>
+      <form class="account-form" id="delete-form">
+        <input name="password" type="password" autocomplete="current-password" placeholder="비밀번호" aria-label="탈퇴 확인용 비밀번호" required maxlength="64">
+        <button type="submit" class="delete-btn">탈퇴하기</button>
+      </form>
+    </details>
   </div>
 </div>
 
