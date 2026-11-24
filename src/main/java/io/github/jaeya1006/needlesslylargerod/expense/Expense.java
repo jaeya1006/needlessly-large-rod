@@ -1,6 +1,11 @@
 package io.github.jaeya1006.needlesslylargerod.expense;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import io.github.jaeya1006.needlesslylargerod.auth.Member;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
@@ -25,7 +30,15 @@ public class Expense {
     private Long id;
 
     @JsonIgnore // 화면에 보낼 필요 없음
+    @Column(name = "owner_id")
     private Long ownerId; // 회원 id. 로그인 기능 전 데이터는 null → 첫 회원에게 넘긴다
+
+    // DB 외래 키(owner_id → member.id)만 만들려는 연결. 탈퇴한 회원 이름으로는 저장되지 않는다.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", insertable = false, updatable = false)
+    @JsonIgnore
+    @Getter(AccessLevel.NONE)
+    private Member owner;
 
     @Enumerated(EnumType.STRING)
     private Type type;

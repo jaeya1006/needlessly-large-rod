@@ -1,5 +1,7 @@
 package io.github.jaeya1006.needlesslylargerod.expense;
 
+import io.github.jaeya1006.needlesslylargerod.TestMembers;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,6 +28,11 @@ class WastedAndBigTest {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @BeforeEach
+    void members() {
+        TestMembers.ensure(jdbc, 301, 302, 303, 304); // 외래 키 때문에 가짜 로그인 회원 줄이 있어야 한다
+    }
 
     static final RequestPostProcessor ME = jwt().jwt(j -> j.subject("301"));
     static final RequestPostProcessor OTHER = jwt().jwt(j -> j.subject("302"));

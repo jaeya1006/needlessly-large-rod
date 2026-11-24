@@ -29,6 +29,18 @@ public class Member {
 
     private Instant createdAt;
 
+    // 액세스 토큰의 ver와 같아야 통과. 비밀번호를 바꾸면 올려서 이전 토큰을 바로 막는다(null = 0, 예전 행 대비)
+    private Integer tokenVersion;
+
+    public int tokenVersion() {
+        return tokenVersion == null ? 0 : tokenVersion;
+    }
+
+    public void changePassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.tokenVersion = tokenVersion() + 1;
+    }
+
     public Member(String email, String passwordHash) {
         this.email = email;
         this.passwordHash = passwordHash;

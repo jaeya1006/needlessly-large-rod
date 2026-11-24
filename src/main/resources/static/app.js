@@ -431,7 +431,11 @@ function updateNextButton() {
 
 $('add').onclick = () => openSheet(); // 클릭 이벤트가 entry로 넘어가지 않게
 document.querySelectorAll('[data-close]').forEach(b => b.onclick = closeSheet);
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('account').hidden) closeAccount();
+  else if (!$('sheet').hidden) closeSheet();
+});
 amountInput.oninput = () => {
   const v = amountValue();
   amountInput.value = v ? v.toLocaleString('ko-KR') : '';
@@ -598,6 +602,7 @@ authForm.onsubmit = async ev => {
   if (!res) { $('auth-error').textContent = '서버에 연결하지 못했어요.'; return; }
   if (res.status === 409) { $('auth-error').textContent = '이미 가입한 이메일이에요. 로그인해 주세요.'; return; }
   if (res.status === 400) { $('auth-error').textContent = '이메일 형식과 비밀번호(8~64자)를 확인해 주세요.'; return; }
+  if (res.status === 429) { $('auth-error').textContent = '시도가 너무 많아요. 15분 뒤에 다시 해 주세요.'; return; }
   if (!res.ok) { $('auth-error').textContent = '이메일 또는 비밀번호가 맞지 않아요.'; return; }
   authForm.password.value = '';
   start();
@@ -612,6 +617,10 @@ function resetMemberUi() {
   $('benefit-list').replaceChildren();
   $('benefit-msg').textContent = '';
   $('sheet').hidden = true;
+  $('account').hidden = true;
+  $('password-form').reset();
+  $('delete-form').reset();
+  $('account-msg').textContent = '';
   notice('');
   render();
 }
@@ -619,7 +628,7 @@ function resetMemberUi() {
 $('logout').onclick = async () => {
   const res = await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
   // 서버가 못 받았으면 쿠키가 살아 있어서 새로고침하면 다시 로그인된다 → 성공처럼 보이지 않게
-  if (!res?.ok) { notice('로그아웃하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.'); return; }
+  if (!res?.ok) { $('account-msg').textContent = '로그아웃하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.'; return; }
   resetMemberUi();
   setAuthMode(false);
   showLogin();
@@ -633,12 +642,58 @@ async function start() {
   const me = await res.json();
   resetMemberUi(); // 다른 계정으로 다시 로그인한 경우 대비
   $('auth').hidden = true;
-  $('logout').title = `${me.email} 로그아웃`;
+  $('account-email').textContent = me.email;
   load();
   loadWatched();
   loadProfile();
   loadSettings();
 }
+
+// ---------- 계정 ----------
+function closeAccount() {
+  $('account').hidden = true;
+  $('account-btn').focus();
+}
+$('account-btn').onclick = () => {
+  $('account-msg').textContent = '';
+  $('account').hidden = false;
+  $('password-form').currentPassword.focus();
+};
+$('account-close').onclick = closeAccount;
+
+const ACCOUNT_ERRORS = {
+  403: '현재 비밀번호가 맞지 않아요.',
+  429: '시도가 너무 많아요. 15분 뒤에 다시 해 주세요.',
+  400: '새 비밀번호는 8~64자로 정해 주세요(한글은 24자까지).',
+};
+
+$('password-form').onsubmit = async ev => {
+  ev.preventDefault();
+  const f = ev.target;
+  if (f.newPassword.value !== f.confirm.value) { $('account-msg').textContent = '새 비밀번호 두 칸이 서로 달라요.'; return; }
+  const res = await api('/api/auth/password', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currentPassword: f.currentPassword.value, newPassword: f.newPassword.value }),
+  }).catch(() => null);
+  if (res?.status === 401) return; // 로그인 만료 → api()가 로그인 화면을 띄움
+  $('account-msg').textContent = res?.ok ? '비밀번호를 바꿨어요. 다른 기기에서는 다시 로그인해야 해요.'
+    : ACCOUNT_ERRORS[res?.status] || '비밀번호를 바꾸지 못했어요. 잠시 뒤 다시 시도해 주세요.';
+  if (res?.ok) f.reset();
+};
+
+$('delete-form').onsubmit = async ev => {
+  ev.preventDefault();
+  if (!confirm('정말 탈퇴할까요? 모든 지출 기록이 지워지고 되돌릴 수 없어요.')) return;
+  const res = await api('/api/auth/me', {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: ev.target.password.value }),
+  }).catch(() => null);
+  if (res?.status === 401) return;
+  if (!res?.ok) { $('account-msg').textContent = ACCOUNT_ERRORS[res?.status] || '탈퇴하지 못했어요. 잠시 뒤 다시 시도해 주세요.'; return; }
+  resetMemberUi();
+  setAuthMode(false);
+  showLogin('탈퇴했어요. 그동안 고마웠어요.');
+};
 
 start();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
